@@ -1,0 +1,16 @@
+# GUI Framework
+PySide6
+
+# Backend Logic
+TinyDB
+pydantic
+requests
+
+# Testing
+pytest
+pytest-cov
+pytest-qt
+
+# Linting & Type Checking
+ruff
+mypy
