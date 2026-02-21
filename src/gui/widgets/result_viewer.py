@@ -13,7 +13,7 @@ from difflib import ndiff
 from html import escape
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
