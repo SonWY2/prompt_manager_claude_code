@@ -42,6 +42,11 @@ def _get_stylesheet() -> str:
         str: QSS 스타일시트 문자열
     """
     return f"""
+    * {{
+        font-family: 'Segoe UI', 'Helvetica Neue', 'Arial', sans-serif;
+        font-size: 10pt;
+    }}
+
     QMainWindow {{
         background-color: {COLOR_BACKGROUND};
         color: {COLOR_TEXT_PRIMARY};
@@ -53,13 +58,21 @@ def _get_stylesheet() -> str:
         border: none;
     }}
 
-    QSplitter::handle:horizontal {{
-        background-color: {COLOR_BORDER};
-        width: 1px;
+    /* Splitter Styling - Minimal */
+    QSplitter::handle {{
+        background-color: transparent;
     }}
 
-    QSplitter::handle:hover {{
-        background-color: {COLOR_ACCENT};
+    QSplitter::handle:horizontal {{
+        width: 1px;
+        background-color: {COLOR_BORDER};
+        margin: 0px 0px;
+    }}
+
+    QSplitter::handle:vertical {{
+        height: 1px;
+        background-color: {COLOR_BORDER};
+        margin: 0px 0px;
     }}
 
     QLabel {{
@@ -67,49 +80,102 @@ def _get_stylesheet() -> str:
         background-color: transparent;
     }}
 
+    /* Menu Bar Styling */
     QMenuBar {{
         background-color: {COLOR_SIDEBAR};
         color: {COLOR_TEXT_PRIMARY};
         border-bottom: 1px solid {COLOR_BORDER};
+        padding: 4px 6px;
     }}
 
     QMenuBar::item {{
         background-color: transparent;
-        padding: 8px 16px;
+        padding: 6px 12px;
+        border-radius: 4px;
+        margin-right: 4px;
     }}
 
     QMenuBar::item:selected {{
-        background-color: {COLOR_ACCENT};
+        background-color: rgba(255, 255, 255, 0.1);
     }}
 
     QMenu {{
         background-color: {COLOR_SIDEBAR};
         color: {COLOR_TEXT_PRIMARY};
         border: 1px solid {COLOR_BORDER};
+        border-radius: 8px;
+        padding: 5px 0px;
     }}
 
     QMenu::item {{
-        padding: 8px 24px;
+        padding: 6px 24px;
+        border-radius: 4px;
+        margin: 0px 4px;
     }}
 
     QMenu::item:selected {{
         background-color: {COLOR_ACCENT};
+        color: #FFFFFF;
     }}
 
+    QMenu::separator {{
+        height: 1px;
+        background-color: {COLOR_BORDER};
+        margin: 4px 0px;
+    }}
+
+    /* Tool Bar Styling */
     QToolBar {{
         background-color: {COLOR_SIDEBAR};
         color: {COLOR_TEXT_PRIMARY};
         border-bottom: 1px solid {COLOR_BORDER};
-        spacing: 4px;
+        spacing: 8px;
+        padding: 6px;
     }}
 
     QToolBar::item {{
         background-color: transparent;
-        padding: 4px;
+        padding: 6px 12px;
+        border-radius: 6px;
     }}
 
     QToolBar::item:hover {{
-        background-color: rgba(0, 122, 204, 0.2);
+        background-color: rgba(255, 255, 255, 0.1);
+    }}
+
+    /* Scrollbars */
+    QScrollBar:vertical {{
+        border: none;
+        background: {COLOR_BACKGROUND};
+        width: 12px;
+        margin: 0px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: #48484A;
+        min-height: 20px;
+        border-radius: 6px;
+        margin: 2px;
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        border: none;
+        background: none;
+    }}
+
+    QScrollBar:horizontal {{
+        border: none;
+        background: {COLOR_BACKGROUND};
+        height: 12px;
+        margin: 0px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: #48484A;
+        min-width: 20px;
+        border-radius: 6px;
+        margin: 2px;
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+        border: none;
+        background: none;
     }}
     """
 

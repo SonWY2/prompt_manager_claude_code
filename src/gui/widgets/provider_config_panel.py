@@ -27,6 +27,16 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.provider_manager import ProviderManager
+from src.gui.theme import (
+    COLOR_BACKGROUND,
+    COLOR_INPUT_BG,
+    COLOR_INPUT_BORDER,
+    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_SECONDARY,
+    COLOR_BUTTON_BG,
+    COLOR_BUTTON_HOVER,
+    COLOR_ACCENT,
+)
 
 PROVIDER_PRESETS = {
     "OpenAI": {
@@ -100,33 +110,69 @@ class ProviderConfigPanel(QWidget):
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
 
         scroll_widget = QWidget()
+        scroll_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_BACKGROUND};
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+            QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+                background-color: {COLOR_INPUT_BG};
+                color: {COLOR_TEXT_PRIMARY};
+                border: 1px solid {COLOR_INPUT_BORDER};
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 10pt;
+            }}
+            QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{
+                border: 1px solid {COLOR_ACCENT};
+            }}
+            QPushButton {{
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 10pt;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_BUTTON_HOVER};
+            }}
+            QLabel {{
+                color: {COLOR_TEXT_SECONDARY};
+                font-size: 10pt;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+        """)
         scroll_layout = QVBoxLayout(scroll_widget)
         scroll_layout.setContentsMargins(20, 20, 20, 20)
         scroll_layout.setSpacing(20)
 
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Provider Name")
-        form_layout.addRow("Name:", self.name_edit)
+        form_layout.addRow("Name", self.name_edit)
 
         self.description_edit = QPlainTextEdit()
         self.description_edit.setMaximumHeight(80)
         self.description_edit.setPlaceholderText("Description (optional)")
-        form_layout.addRow("Description:", self.description_edit)
+        form_layout.addRow("Description", self.description_edit)
 
         scroll_layout.addLayout(form_layout)
 
         general_label = QLabel("General Info")
-        general_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        general_label.setStyleSheet(f"font-size: 12pt; font-weight: 600; color: {COLOR_TEXT_PRIMARY}; margin-top: 10px;")
         scroll_layout.addWidget(general_label)
 
         preset_layout = QHBoxLayout()
         preset_layout.setSpacing(10)
 
-        preset_label = QLabel("Provider Preset:")
-        preset_label.setStyleSheet("font-weight: bold;")
+        preset_label = QLabel("Provider Preset")
+        preset_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
         preset_layout.addWidget(preset_label)
 
         self.preset_combo = QComboBox()
@@ -138,10 +184,11 @@ class ProviderConfigPanel(QWidget):
 
         connection_layout = QFormLayout()
         connection_layout.setSpacing(10)
+        connection_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("https://api.openai.com/v1")
-        connection_layout.addRow("API Base URL:", self.api_url_edit)
+        connection_layout.addRow("API Base URL", self.api_url_edit)
 
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -149,15 +196,15 @@ class ProviderConfigPanel(QWidget):
 
         self.show_api_key_button = QPushButton("Show")
         self.show_api_key_button.setCheckable(True)
-        self.show_api_key_button.setMaximumWidth(60)
+        self.show_api_key_button.setFixedWidth(60)
 
         api_key_layout = QHBoxLayout()
         api_key_layout.addWidget(self.api_key_edit)
         api_key_layout.addWidget(self.show_api_key_button)
-        connection_layout.addRow("API Key:", api_key_layout)
+        connection_layout.addRow("API Key", api_key_layout)
 
         connection_label = QLabel("Connection Settings")
-        connection_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        connection_label.setStyleSheet(f"font-size: 12pt; font-weight: 600; color: {COLOR_TEXT_PRIMARY}; margin-top: 10px;")
         scroll_layout.addWidget(connection_label)
 
         scroll_layout.addLayout(connection_layout)
@@ -172,17 +219,18 @@ class ProviderConfigPanel(QWidget):
         scroll_layout.addLayout(button_layout)
 
         parameters_label = QLabel("Default Model Parameters")
-        parameters_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        parameters_label.setStyleSheet(f"font-size: 12pt; font-weight: 600; color: {COLOR_TEXT_PRIMARY}; margin-top: 10px;")
         scroll_layout.addWidget(parameters_label)
 
         parameters_layout = QFormLayout()
         parameters_layout.setSpacing(10)
+        parameters_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItems(DEFAULT_MODEL_OPTIONS)
         self.model_combo.setCurrentText("llama2")
-        parameters_layout.addRow("Default Model:", self.model_combo)
+        parameters_layout.addRow("Default Model", self.model_combo)
 
         temp_layout = QHBoxLayout()
         self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
@@ -196,12 +244,12 @@ class ProviderConfigPanel(QWidget):
 
         temp_layout.addWidget(self.temperature_slider)
         temp_layout.addWidget(self.temperature_spinbox)
-        parameters_layout.addRow("Temperature:", temp_layout)
+        parameters_layout.addRow("Temperature", temp_layout)
 
         self.max_tokens_spinbox = QSpinBox()
         self.max_tokens_spinbox.setRange(1, 128000)
         self.max_tokens_spinbox.setValue(4096)
-        parameters_layout.addRow("Max Tokens:", self.max_tokens_spinbox)
+        parameters_layout.addRow("Max Tokens", self.max_tokens_spinbox)
 
         scroll_layout.addLayout(parameters_layout)
 
@@ -213,6 +261,18 @@ class ProviderConfigPanel(QWidget):
         self.save_button = QPushButton("Save")
         self.save_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_button.setEnabled(False)
+        self.save_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: white;
+                font-weight: 600;
+                padding: 10px 24px;
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_SECONDARY};
+            }}
+        """)
         save_button_layout.addWidget(self.save_button)
 
         scroll_layout.addLayout(save_button_layout)

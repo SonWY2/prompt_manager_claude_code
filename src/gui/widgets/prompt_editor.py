@@ -35,6 +35,11 @@ from src.gui.theme import (
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
     COLOR_BORDER,
+    COLOR_INPUT_BG,
+    COLOR_INPUT_BORDER,
+    COLOR_BUTTON_BG,
+    COLOR_BUTTON_HOVER,
+    COLOR_BACKGROUND,
 )
 
 
@@ -67,17 +72,18 @@ class PromptEditor(QWidget):
         self._tab_widget.setStyleSheet(f"""
             QTabWidget::pane {{
                 border: none;
-                background-color: {COLOR_SIDEBAR};
+                background-color: {COLOR_BACKGROUND};
             }}
             QTabBar::tab {{
-                background-color: {COLOR_BORDER};
+                background-color: transparent;
                 color: {COLOR_TEXT_SECONDARY};
-                padding: 12px 16px;
-                margin-right: 2px;
+                padding: 10px 16px;
+                margin-right: 4px;
                 font-size: 10pt;
+                font-weight: 500;
+                border-bottom: 2px solid transparent;
             }}
             QTabBar::tab:selected {{
-                background-color: {COLOR_SIDEBAR};
                 color: {COLOR_ACCENT};
                 border-bottom: 2px solid {COLOR_ACCENT};
             }}
@@ -230,26 +236,26 @@ class PromptEditor(QWidget):
             QWidget: 버전 툴바 위젯
         """
         widget = QWidget()
-        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR};")
+        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};")
 
         layout = QHBoxLayout()
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        version_label = QLabel("Version:")
-        version_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 9pt;")
+        version_label = QLabel("Version")
+        version_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 10pt;")
         layout.addWidget(version_label)
 
         self._version_selector = QComboBox()
         self._version_selector.setStyleSheet(f"""
             QComboBox {{
-                background-color: {COLOR_BORDER};
+                background-color: {COLOR_INPUT_BG};
                 color: {COLOR_TEXT_PRIMARY};
-                border: 1px solid {COLOR_BORDER};
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 9pt;
-                min-width: 120px;
+                border: 1px solid {COLOR_INPUT_BORDER};
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-size: 10pt;
+                min-width: 140px;
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -262,22 +268,24 @@ class PromptEditor(QWidget):
         """)
         layout.addWidget(self._version_selector)
 
-        new_version_button = QPushButton("+ New Version")
+        new_version_button = QPushButton("New Version")
+        new_version_button.setCursor(Qt.CursorShape.PointingHandCursor)
         new_version_button.setStyleSheet(f"""
             QPushButton {{
-                background-color: {COLOR_ACCENT};
-                color: white;
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_PRIMARY};
                 border: none;
-                border-radius: 4px;
+                border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 9pt;
-                font-weight: bold;
+                font-size: 10pt;
+                font-weight: 500;
             }}
             QPushButton:hover {{
-                background-color: rgba(0, 122, 204, 0.8);
+                background-color: {COLOR_BUTTON_HOVER};
             }}
             QPushButton:pressed {{
-                background-color: rgba(0, 122, 204, 0.6);
+                background-color: {COLOR_ACCENT};
+                color: white;
             }}
         """)
         new_version_button.clicked.connect(self.new_version_clicked.emit)
@@ -307,12 +315,12 @@ class PromptEditor(QWidget):
         header = QLabel(f"{title}")
         header.setStyleSheet(f"""
             QLabel {{
-                background-color: rgba(255, 255, 255, 0.05);
+                background-color: transparent;
                 color: {COLOR_TEXT_SECONDARY};
-                padding: 8px 12px;
+                padding: 12px 16px 8px 16px;
                 font-size: 9pt;
-                font-weight: bold;
-                border-bottom: 1px solid {COLOR_BORDER};
+                font-weight: 600;
+                letter-spacing: 0.5px;
             }}
         """)
         layout.addWidget(header)
@@ -321,16 +329,16 @@ class PromptEditor(QWidget):
         edit = QPlainTextEdit()
         edit.setStyleSheet(f"""
             QPlainTextEdit {{
-                background-color: {COLOR_SIDEBAR};
+                background-color: transparent;
                 color: {COLOR_TEXT_PRIMARY};
                 border: none;
-                padding: 12px;
-                font-family: 'Consolas', 'Fira Code', monospace;
+                padding: 0px 16px 16px 16px;
+                font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
                 font-size: 11pt;
                 line-height: 1.5;
             }}
             QPlainTextEdit:focus {{
-                background-color: #1A1A1D;
+                background-color: transparent;
             }}
         """)
         edit.setPlaceholderText(subtitle)

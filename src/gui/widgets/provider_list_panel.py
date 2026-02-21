@@ -23,6 +23,15 @@ from PySide6.QtWidgets import (
 
 from src.core.provider_manager import ProviderManager
 from src.data.models import Provider
+from src.gui.theme import (
+    COLOR_SIDEBAR,
+    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_SECONDARY,
+    COLOR_BORDER,
+    COLOR_ACCENT,
+    COLOR_BUTTON_BG,
+    COLOR_BUTTON_HOVER,
+)
 
 
 class ProviderListPanel(QWidget):
@@ -72,11 +81,27 @@ class ProviderListPanel(QWidget):
         header_layout.setSpacing(8)
 
         title_label = QLabel("Providers")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {COLOR_TEXT_PRIMARY};")
 
-        self.add_button = QPushButton("+ Add")
+        self.add_button = QPushButton("Add")
         self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_button.setMaximumWidth(80)
+        self.add_button.setFixedWidth(60)
+        self.add_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_PRIMARY};
+                border: none;
+                border-radius: 6px;
+                padding: 4px 8px;
+                font-size: 10pt;
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_BUTTON_HOVER};
+            }}
+            QPushButton:pressed {{
+                background-color: {COLOR_ACCENT};
+            }}
+        """)
 
         header_layout.addWidget(title_label)
         header_layout.addStretch()
@@ -86,7 +111,29 @@ class ProviderListPanel(QWidget):
 
         self.provider_list = QListWidget()
         self.provider_list.setFrameShape(QFrame.Shape.NoFrame)
-        self.provider_list.setAlternatingRowColors(True)
+        self.provider_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {COLOR_SIDEBAR};
+                color: {COLOR_TEXT_PRIMARY};
+                border: none;
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 10px 14px;
+                margin: 2px 8px;
+                border-radius: 6px;
+                border: none;
+                color: {COLOR_TEXT_SECONDARY};
+            }}
+            QListWidget::item:selected {{
+                background-color: rgba(10, 132, 255, 0.15);
+                color: {COLOR_ACCENT};
+            }}
+            QListWidget::item:hover:!selected {{
+                background-color: rgba(255, 255, 255, 0.05);
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+        """)
 
         layout.addWidget(self.provider_list)
 
