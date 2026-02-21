@@ -22,7 +22,17 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
 )
 
-from src.gui.theme import COLOR_SIDEBAR, COLOR_ACCENT, COLOR_TEXT_PRIMARY, COLOR_BORDER
+from src.gui.theme import (
+    COLOR_SIDEBAR,
+    COLOR_ACCENT,
+    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_SECONDARY,
+    COLOR_BORDER,
+    COLOR_INPUT_BG,
+    COLOR_INPUT_BORDER,
+    COLOR_BUTTON_BG,
+    COLOR_BUTTON_HOVER,
+)
 
 
 class TaskNavigator(QWidget):
@@ -55,36 +65,40 @@ class TaskNavigator(QWidget):
         self._search_bar.setPlaceholderText("Search tasks...")
         self._search_bar.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {COLOR_BORDER};
+                background-color: {COLOR_INPUT_BG};
                 color: {COLOR_TEXT_PRIMARY};
-                border: 1px solid {COLOR_BORDER};
-                border-radius: 4px;
+                border: 1px solid {COLOR_INPUT_BORDER};
+                border-radius: 8px;
                 padding: 8px 12px;
                 font-size: 10pt;
             }}
             QLineEdit:focus {{
                 border: 1px solid {COLOR_ACCENT};
+                background-color: {COLOR_INPUT_BG};
             }}
         """)
         header_layout.addWidget(self._search_bar)
 
         # New Task 버튼
         self._new_task_button = QPushButton()
-        self._new_task_button.setText("+ New Task")
+        self._new_task_button.setText("New Task")
+        self._new_task_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_task_button.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {COLOR_ACCENT};
-                border: 1px dashed {COLOR_BORDER};
-                border-radius: 4px;
-                padding: 8px;
+                background-color: {COLOR_BUTTON_BG};
+                color: {COLOR_TEXT_PRIMARY};
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
                 font-size: 10pt;
-                font-weight: bold;
+                font-weight: 500;
             }}
             QPushButton:hover {{
+                background-color: {COLOR_BUTTON_HOVER};
+            }}
+            QPushButton:pressed {{
                 background-color: {COLOR_ACCENT};
                 color: white;
-                border-style: solid;
             }}
         """)
         header_layout.addWidget(self._new_task_button)
@@ -93,6 +107,7 @@ class TaskNavigator(QWidget):
 
         # 태스크 리스트
         self._task_list = QListWidget()
+        self._task_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._task_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {COLOR_SIDEBAR};
@@ -101,15 +116,19 @@ class TaskNavigator(QWidget):
                 outline: none;
             }}
             QListWidget::item {{
-                padding: 12px;
-                border-bottom: 1px solid {COLOR_BORDER};
+                padding: 10px 14px;
+                margin: 2px 8px;
+                border-radius: 6px;
+                border: none;
+                color: {COLOR_TEXT_SECONDARY};
             }}
             QListWidget::item:selected {{
-                background-color: #37373D;
-                border-left: 3px solid {COLOR_ACCENT};
+                background-color: rgba(10, 132, 255, 0.15); /* Translucent Blue */
+                color: {COLOR_ACCENT};
             }}
-            QListWidget::item:hover {{
-                background-color: #2D2D32;
+            QListWidget::item:hover:!selected {{
+                background-color: rgba(255, 255, 255, 0.05);
+                color: {COLOR_TEXT_PRIMARY};
             }}
         """)
         layout.addWidget(self._task_list)

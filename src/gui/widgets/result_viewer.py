@@ -34,6 +34,11 @@ from src.gui.theme import (
     COLOR_SIDEBAR,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
+    COLOR_INPUT_BG,
+    COLOR_INPUT_BORDER,
+    COLOR_BUTTON_BG,
+    COLOR_BUTTON_HOVER,
+    COLOR_BACKGROUND,
 )
 
 
@@ -70,9 +75,20 @@ class ResultViewer(QWidget):
         self._tab_widget = QTabWidget()
         self._tab_widget.setStyleSheet(
             f"""
-            QTabWidget::pane {{ border: none; background-color: {COLOR_SIDEBAR}; }}
-            QTabBar::tab {{ background-color: {COLOR_BORDER}; color: {COLOR_TEXT_SECONDARY}; padding: 12px 16px; margin-right: 2px; font-size: 10pt; }}
-            QTabBar::tab:selected {{ background-color: {COLOR_SIDEBAR}; color: {COLOR_ACCENT}; border-bottom: 2px solid {COLOR_ACCENT}; }}
+            QTabWidget::pane {{ border: none; background-color: {COLOR_BACKGROUND}; }}
+            QTabBar::tab {{
+                background-color: transparent;
+                color: {COLOR_TEXT_SECONDARY};
+                padding: 10px 16px;
+                margin-right: 4px;
+                font-size: 10pt;
+                font-weight: 500;
+                border-bottom: 2px solid transparent;
+            }}
+            QTabBar::tab:selected {{
+                color: {COLOR_ACCENT};
+                border-bottom: 2px solid {COLOR_ACCENT};
+            }}
             QTabBar::tab:hover {{ color: {COLOR_TEXT_PRIMARY}; }}
             """
         )
@@ -90,22 +106,34 @@ class ResultViewer(QWidget):
 
     def _create_control_bar(self) -> QWidget:
         widget = QWidget()
-        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR};")
+        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};")
 
         layout = QHBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        model_label = QLabel("Model:")
+        model_label = QLabel("Model")
         model_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 10pt;")
         layout.addWidget(model_label)
 
         self._model_selector = QComboBox()
         self._model_selector.setStyleSheet(
             f"""
-            QComboBox {{ background-color: {COLOR_BORDER}; color: {COLOR_TEXT_PRIMARY}; border: 1px solid {COLOR_BORDER}; border-radius: 4px; padding: 6px 12px; font-size: 10pt; min-width: 200px; }}
+            QComboBox {{
+                background-color: {COLOR_INPUT_BG};
+                color: {COLOR_TEXT_PRIMARY};
+                border: 1px solid {COLOR_INPUT_BORDER};
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-size: 10pt;
+                min-width: 200px;
+            }}
             QComboBox::drop-down {{ border: none; }}
-            QComboBox QAbstractItemView {{ background-color: {COLOR_SIDEBAR}; selection-background-color: {COLOR_ACCENT}; color: {COLOR_TEXT_PRIMARY}; }}
+            QComboBox QAbstractItemView {{
+                background-color: {COLOR_SIDEBAR};
+                selection-background-color: {COLOR_ACCENT};
+                color: {COLOR_TEXT_PRIMARY};
+            }}
             """
         )
         layout.addWidget(self._model_selector)
@@ -113,12 +141,21 @@ class ResultViewer(QWidget):
         layout.addStretch()
 
         self._run_button = QPushButton("RUN")
+        self._run_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._run_button.setStyleSheet(
             f"""
-            QPushButton {{ background-color: {COLOR_ACCENT}; color: white; border: none; border-radius: 4px; padding: 10px 24px; font-size: 11pt; font-weight: bold; }}
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 32px;
+                font-size: 11pt;
+                font-weight: 600;
+            }}
             QPushButton:hover {{ background-color: #0062A3; }}
             QPushButton:pressed {{ background-color: #0055A0; }}
-            QPushButton:disabled {{ background-color: {COLOR_BORDER}; color: {COLOR_TEXT_SECONDARY}; }}
+            QPushButton:disabled {{ background-color: {COLOR_BUTTON_BG}; color: {COLOR_TEXT_SECONDARY}; }}
             """
         )
         layout.addWidget(self._run_button)
@@ -135,9 +172,14 @@ class ResultViewer(QWidget):
         self._result_browser = QTextBrowser()
         self._result_browser.setStyleSheet(
             f"""
-            QTextBrowser {{ background-color: {COLOR_SIDEBAR}; color: {COLOR_TEXT_PRIMARY}; border: none; padding: 16px; font-size: 10pt; }}
-            QTextBrowser::-webkit-scrollbar {{ width: 8px; }}
-            QTextBrowser::-webkit-scrollbar-thumb {{ background-color: {COLOR_BORDER}; border-radius: 4px; }}
+            QTextBrowser {{
+                background-color: transparent;
+                color: {COLOR_TEXT_PRIMARY};
+                border: none;
+                padding: 20px;
+                font-size: 11pt;
+                line-height: 1.6;
+            }}
             """
         )
         layout.addWidget(self._result_browser)
