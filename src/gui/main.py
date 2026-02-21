@@ -6,6 +6,10 @@
 QApplication 초기화 및 MainWindow 생성을 담당하는 메인 모듈
 """
 
+from src.gui.qt_platform import configure_qt_platform
+
+configure_qt_platform()
+
 from typing import Optional, cast
 from PySide6.QtWidgets import QApplication
 
@@ -17,6 +21,7 @@ _app_instance: Optional[QApplication] = None
 # 최소 윈도우 크기 상수
 MIN_WINDOW_WIDTH: int = 1200
 MIN_WINDOW_HEIGHT: int = 800
+
 
 def get_app_instance() -> QApplication:
     """QApplication 싱글톤 인스턴스 반환"""

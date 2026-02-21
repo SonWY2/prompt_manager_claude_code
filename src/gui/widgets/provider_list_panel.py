@@ -27,10 +27,14 @@ from src.gui.theme import (
     COLOR_SIDEBAR,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
-    COLOR_BORDER,
     COLOR_ACCENT,
+    COLOR_ACCENT_SOFT,
     COLOR_BUTTON_BG,
     COLOR_BUTTON_HOVER,
+    COLOR_SURFACE_HOVER,
+    COLOR_STATUS_CONNECTED,
+    COLOR_STATUS_ERROR,
+    COLOR_STATUS_UNKNOWN,
 )
 
 
@@ -44,9 +48,9 @@ class ProviderListPanel(QWidget):
     상태 표시등(연결 상태)을 시각적으로 표시합니다.
     """
 
-    STATUS_COLOR_CONNECTED = "#4CAF50"
-    STATUS_COLOR_ERROR = "#F44336"
-    STATUS_COLOR_UNKNOWN = "#9E9E9E"
+    STATUS_COLOR_CONNECTED = COLOR_STATUS_CONNECTED
+    STATUS_COLOR_ERROR = COLOR_STATUS_ERROR
+    STATUS_COLOR_UNKNOWN = COLOR_STATUS_UNKNOWN
 
     provider_selected = Signal(str)
     add_provider_requested = Signal()
@@ -81,7 +85,9 @@ class ProviderListPanel(QWidget):
         header_layout.setSpacing(8)
 
         title_label = QLabel("Providers")
-        title_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {COLOR_TEXT_PRIMARY};")
+        title_label.setStyleSheet(
+            f"font-size: 14px; font-weight: 600; color: {COLOR_TEXT_PRIMARY};"
+        )
 
         self.add_button = QPushButton("Add")
         self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -126,11 +132,11 @@ class ProviderListPanel(QWidget):
                 color: {COLOR_TEXT_SECONDARY};
             }}
             QListWidget::item:selected {{
-                background-color: rgba(10, 132, 255, 0.15);
+                background-color: {COLOR_ACCENT_SOFT};
                 color: {COLOR_ACCENT};
             }}
             QListWidget::item:hover:!selected {{
-                background-color: rgba(255, 255, 255, 0.05);
+                background-color: {COLOR_SURFACE_HOVER};
                 color: {COLOR_TEXT_PRIMARY};
             }}
         """)

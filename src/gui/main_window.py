@@ -21,13 +21,7 @@ from src.gui.widgets.task_navigator import TaskNavigator
 from src.gui.widgets.prompt_editor import PromptEditor
 from src.gui.widgets.result_viewer import ResultViewer
 from src.gui.widgets.provider_management_widget import ProviderManagementWidget
-from src.gui.theme import (
-    COLOR_BACKGROUND,
-    COLOR_SIDEBAR,
-    COLOR_ACCENT,
-    COLOR_TEXT_PRIMARY,
-    COLOR_BORDER,
-)
+from src.gui.theme import get_main_window_stylesheet
 from src.core.task_manager import TaskManager
 from src.core.provider_manager import ProviderManager
 from src.core.llm_service import LLMService
@@ -35,149 +29,12 @@ from src.core.template_engine import TemplateEngine
 from PySide6.QtWidgets import QInputDialog, QDialog, QVBoxLayout
 
 
-def _get_stylesheet() -> str:
-    """Modern Dark Mode QSS 스타일시트 생성
-
-    Returns:
-        str: QSS 스타일시트 문자열
-    """
-    return f"""
-    * {{
-        font-family: 'Segoe UI', 'Helvetica Neue', 'Arial', sans-serif;
-        font-size: 10pt;
-    }}
-
-    QMainWindow {{
-        background-color: {COLOR_BACKGROUND};
-        color: {COLOR_TEXT_PRIMARY};
-    }}
-
-    QWidget {{
-        background-color: {COLOR_BACKGROUND};
-        color: {COLOR_TEXT_PRIMARY};
-        border: none;
-    }}
-
-    /* Splitter Styling - Minimal */
-    QSplitter::handle {{
-        background-color: transparent;
-    }}
-
-    QSplitter::handle:horizontal {{
-        width: 1px;
-        background-color: {COLOR_BORDER};
-        margin: 0px 0px;
-    }}
-
-    QSplitter::handle:vertical {{
-        height: 1px;
-        background-color: {COLOR_BORDER};
-        margin: 0px 0px;
-    }}
-
-    QLabel {{
-        color: {COLOR_TEXT_PRIMARY};
-        background-color: transparent;
-    }}
-
-    /* Menu Bar Styling */
-    QMenuBar {{
-        background-color: {COLOR_SIDEBAR};
-        color: {COLOR_TEXT_PRIMARY};
-        border-bottom: 1px solid {COLOR_BORDER};
-        padding: 4px 6px;
-    }}
-
-    QMenuBar::item {{
-        background-color: transparent;
-        padding: 6px 12px;
-        border-radius: 4px;
-        margin-right: 4px;
-    }}
-
-    QMenuBar::item:selected {{
-        background-color: rgba(255, 255, 255, 0.1);
-    }}
-
-    QMenu {{
-        background-color: {COLOR_SIDEBAR};
-        color: {COLOR_TEXT_PRIMARY};
-        border: 1px solid {COLOR_BORDER};
-        border-radius: 8px;
-        padding: 5px 0px;
-    }}
-
-    QMenu::item {{
-        padding: 6px 24px;
-        border-radius: 4px;
-        margin: 0px 4px;
-    }}
-
-    QMenu::item:selected {{
-        background-color: {COLOR_ACCENT};
-        color: #FFFFFF;
-    }}
-
-    QMenu::separator {{
-        height: 1px;
-        background-color: {COLOR_BORDER};
-        margin: 4px 0px;
-    }}
-
-    /* Tool Bar Styling */
-    QToolBar {{
-        background-color: {COLOR_SIDEBAR};
-        color: {COLOR_TEXT_PRIMARY};
-        border-bottom: 1px solid {COLOR_BORDER};
-        spacing: 8px;
-        padding: 6px;
-    }}
-
-    QToolBar::item {{
-        background-color: transparent;
-        padding: 6px 12px;
-        border-radius: 6px;
-    }}
-
-    QToolBar::item:hover {{
-        background-color: rgba(255, 255, 255, 0.1);
-    }}
-
-    /* Scrollbars */
-    QScrollBar:vertical {{
-        border: none;
-        background: {COLOR_BACKGROUND};
-        width: 12px;
-        margin: 0px;
-    }}
-    QScrollBar::handle:vertical {{
-        background: #48484A;
-        min-height: 20px;
-        border-radius: 6px;
-        margin: 2px;
-    }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-        border: none;
-        background: none;
-    }}
-
-    QScrollBar:horizontal {{
-        border: none;
-        background: {COLOR_BACKGROUND};
-        height: 12px;
-        margin: 0px;
-    }}
-    QScrollBar::handle:horizontal {{
-        background: #48484A;
-        min-width: 20px;
-        border-radius: 6px;
-        margin: 2px;
-    }}
-    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-        border: none;
-        background: none;
-    }}
-    """
+MAIN_WINDOW_MIN_WIDTH: int = 1200
+MAIN_WINDOW_MIN_HEIGHT: int = 800
+SPLITTER_SIZE_NAVIGATOR: int = 250
+SPLITTER_SIZE_EDITOR: int = 600
+SPLITTER_SIZE_VIEWER: int = 350
+SPLITTER_SIZE_COLLAPSED: int = 0
 
 
 class MainWindow(QMainWindow):
@@ -188,8 +45,8 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Prompt Manager")
-        self.setMinimumSize(1200, 800)
-        self.setStyleSheet(_get_stylesheet())
+        self.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT)
+        self.setStyleSheet(get_main_window_stylesheet())
 
         self._current_task_id: Optional[str] = None
         self._task_manager = TaskManager()
@@ -344,7 +201,13 @@ class MainWindow(QMainWindow):
         self._main_splitter.setStretchFactor(0, 0)
         self._main_splitter.setStretchFactor(1, 1)
         self._main_splitter.setStretchFactor(2, 0)
-        self._main_splitter.setSizes([250, 600, 350])
+        self._main_splitter.setSizes(
+            [
+                SPLITTER_SIZE_NAVIGATOR,
+                SPLITTER_SIZE_EDITOR,
+                SPLITTER_SIZE_VIEWER,
+            ]
+        )
 
         self.setCentralWidget(self._main_splitter)
 
@@ -489,9 +352,21 @@ class MainWindow(QMainWindow):
             visible: 표시 여부
         """
         if not visible:
-            self._main_splitter.setSizes([0, 600, 350])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_COLLAPSED,
+                    SPLITTER_SIZE_EDITOR,
+                    SPLITTER_SIZE_VIEWER,
+                ]
+            )
         else:
-            self._main_splitter.setSizes([250, 600, 350])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_NAVIGATOR,
+                    SPLITTER_SIZE_EDITOR,
+                    SPLITTER_SIZE_VIEWER,
+                ]
+            )
 
     def _toggle_editor(self, visible: bool) -> None:
         """Prompt Editor 토글
@@ -500,9 +375,21 @@ class MainWindow(QMainWindow):
             visible: 표시 여부
         """
         if not visible:
-            self._main_splitter.setSizes([250, 0, 350])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_NAVIGATOR,
+                    SPLITTER_SIZE_COLLAPSED,
+                    SPLITTER_SIZE_VIEWER,
+                ]
+            )
         else:
-            self._main_splitter.setSizes([250, 600, 350])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_NAVIGATOR,
+                    SPLITTER_SIZE_EDITOR,
+                    SPLITTER_SIZE_VIEWER,
+                ]
+            )
 
     def _toggle_viewer(self, visible: bool) -> None:
         """Result Viewer 토글
@@ -511,9 +398,21 @@ class MainWindow(QMainWindow):
             visible: 표시 여부
         """
         if not visible:
-            self._main_splitter.setSizes([250, 600, 0])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_NAVIGATOR,
+                    SPLITTER_SIZE_EDITOR,
+                    SPLITTER_SIZE_COLLAPSED,
+                ]
+            )
         else:
-            self._main_splitter.setSizes([250, 600, 350])
+            self._main_splitter.setSizes(
+                [
+                    SPLITTER_SIZE_NAVIGATOR,
+                    SPLITTER_SIZE_EDITOR,
+                    SPLITTER_SIZE_VIEWER,
+                ]
+            )
 
     def _toggle_fullscreen(self) -> None:
         """전체화면 토글"""

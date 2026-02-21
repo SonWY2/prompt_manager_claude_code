@@ -1,0 +1,148 @@
+/*
+[overview]
+Prompt Manager 모던/클린 메인 테마 QSS
+
+[description]
+Stitch 기반 모던/클린 데스크톱 스타일을 PySide6 전역 스타일시트로 정의합니다.
+색상 토큰은 Python 코드에서 @TOKEN@ 형태를 치환하여 적용합니다.
+*/
+
+* {
+    font-family: 'Inter', 'Segoe UI', 'Arial', sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow {
+    background-color: @COLOR_BACKGROUND@;
+    color: @COLOR_TEXT_PRIMARY@;
+}
+
+QWidget {
+    background-color: @COLOR_BACKGROUND@;
+    color: @COLOR_TEXT_PRIMARY@;
+    border: none;
+}
+
+QMenuBar {
+    background-color: @COLOR_SIDEBAR@;
+    color: @COLOR_TEXT_PRIMARY@;
+    border-bottom: 1px solid @COLOR_BORDER@;
+    padding: 4px 6px;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-right: 4px;
+}
+
+QMenuBar::item:selected {
+    background-color: @COLOR_SURFACE_HOVER_STRONG@;
+}
+
+QMenu {
+    background-color: @COLOR_SIDEBAR@;
+    color: @COLOR_TEXT_PRIMARY@;
+    border: 1px solid @COLOR_BORDER@;
+    border-radius: 8px;
+    padding: 6px 0px;
+}
+
+QMenu::item {
+    padding: 7px 24px;
+    border-radius: 6px;
+    margin: 0px 4px;
+}
+
+QMenu::item:selected {
+    background-color: @COLOR_ACCENT@;
+    color: @COLOR_TEXT_ON_ACCENT@;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: @COLOR_BORDER@;
+    margin: 4px 0px;
+}
+
+QToolBar {
+    background-color: @COLOR_SIDEBAR@;
+    color: @COLOR_TEXT_PRIMARY@;
+    border-bottom: 1px solid @COLOR_BORDER@;
+    spacing: 8px;
+    padding: 6px;
+}
+
+QToolBar::item {
+    background-color: transparent;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+QToolBar::item:hover {
+    background-color: @COLOR_SURFACE_HOVER_STRONG@;
+}
+
+QSplitter::handle {
+    background-color: transparent;
+}
+
+QSplitter::handle:horizontal {
+    width: 1px;
+    background-color: @COLOR_BORDER@;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+    background-color: @COLOR_BORDER@;
+}
+
+QLabel {
+    color: @COLOR_TEXT_PRIMARY@;
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: @COLOR_BACKGROUND@;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: @COLOR_SCROLLBAR@;
+    min-height: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    border: none;
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: @COLOR_BACKGROUND@;
+    height: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: @COLOR_SCROLLBAR@;
+    min-width: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    border: none;
+    background: none;
+}

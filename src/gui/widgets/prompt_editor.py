@@ -14,6 +14,7 @@ import re
 from typing import List, Dict, cast, Any
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -41,6 +42,7 @@ from src.gui.theme import (
     COLOR_BUTTON_HOVER,
     COLOR_BACKGROUND,
 )
+from src.gui.widgets.prompt_highlighter import VariableSyntaxHighlighter
 
 
 class PromptEditor(QWidget):
@@ -57,9 +59,20 @@ class PromptEditor(QWidget):
 
         self._versions: List[Dict[str, str]] = []
         self._variable_values: Dict[str, str] = {}
+        self._highlighters: List[VariableSyntaxHighlighter] = []
 
         self._setup_ui()
+        self._setup_variable_highlighting()
         self._connect_signals()
+
+    def _setup_variable_highlighting(self) -> None:
+        documents: List[QTextDocument] = [
+            self._system_prompt_edit.document(),
+            self._user_prompt_edit.document(),
+        ]
+        self._highlighters = [
+            VariableSyntaxHighlighter(document) for document in documents
+        ]
 
     def _setup_ui(self) -> None:
         """UI 설정"""
@@ -236,7 +249,9 @@ class PromptEditor(QWidget):
             QWidget: 버전 툴바 위젯
         """
         widget = QWidget()
-        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};")
+        widget.setStyleSheet(
+            f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};"
+        )
 
         layout = QHBoxLayout()
         layout.setContentsMargins(16, 12, 16, 12)

@@ -8,6 +8,10 @@ PySide6 기반 애플리케이션을 시작하는 메인 진입점입니다.
 
 import sys
 
+from src.gui.qt_platform import configure_qt_platform
+
+configure_qt_platform()
+
 from PySide6.QtWidgets import QApplication
 
 

@@ -25,13 +25,15 @@ from PySide6.QtWidgets import (
 from src.gui.theme import (
     COLOR_SIDEBAR,
     COLOR_ACCENT,
+    COLOR_ACCENT_SOFT,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
-    COLOR_BORDER,
+    COLOR_TEXT_ON_ACCENT,
     COLOR_INPUT_BG,
     COLOR_INPUT_BORDER,
     COLOR_BUTTON_BG,
     COLOR_BUTTON_HOVER,
+    COLOR_SURFACE_HOVER,
 )
 
 
@@ -98,7 +100,7 @@ class TaskNavigator(QWidget):
             }}
             QPushButton:pressed {{
                 background-color: {COLOR_ACCENT};
-                color: white;
+                color: {COLOR_TEXT_ON_ACCENT};
             }}
         """)
         header_layout.addWidget(self._new_task_button)
@@ -123,11 +125,11 @@ class TaskNavigator(QWidget):
                 color: {COLOR_TEXT_SECONDARY};
             }}
             QListWidget::item:selected {{
-                background-color: rgba(10, 132, 255, 0.15); /* Translucent Blue */
+                background-color: {COLOR_ACCENT_SOFT};
                 color: {COLOR_ACCENT};
             }}
             QListWidget::item:hover:!selected {{
-                background-color: rgba(255, 255, 255, 0.05);
+                background-color: {COLOR_SURFACE_HOVER};
                 color: {COLOR_TEXT_PRIMARY};
             }}
         """)

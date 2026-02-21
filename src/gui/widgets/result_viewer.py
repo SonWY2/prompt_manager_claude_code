@@ -13,7 +13,7 @@ from difflib import ndiff
 from html import escape
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -30,15 +30,21 @@ from PySide6.QtWidgets import (
 from src.core.provider_manager import ProviderManager
 from src.gui.theme import (
     COLOR_ACCENT,
+    COLOR_ACCENT_HOVER,
+    COLOR_ACCENT_PRESSED,
     COLOR_BORDER,
     COLOR_SIDEBAR,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
+    COLOR_TEXT_ON_ACCENT,
     COLOR_INPUT_BG,
     COLOR_INPUT_BORDER,
     COLOR_BUTTON_BG,
-    COLOR_BUTTON_HOVER,
     COLOR_BACKGROUND,
+    COLOR_DIFF_REMOVED_BG,
+    COLOR_DIFF_ADDED_BG,
+    COLOR_ERROR,
+    COLOR_ERROR_SOFT,
 )
 
 
@@ -106,7 +112,9 @@ class ResultViewer(QWidget):
 
     def _create_control_bar(self) -> QWidget:
         widget = QWidget()
-        widget.setStyleSheet(f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};")
+        widget.setStyleSheet(
+            f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};"
+        )
 
         layout = QHBoxLayout()
         layout.setContentsMargins(16, 12, 16, 12)
@@ -146,15 +154,15 @@ class ResultViewer(QWidget):
             f"""
             QPushButton {{
                 background-color: {COLOR_ACCENT};
-                color: white;
+                color: {COLOR_TEXT_ON_ACCENT};
                 border: none;
                 border-radius: 8px;
                 padding: 10px 32px;
                 font-size: 11pt;
                 font-weight: 600;
             }}
-            QPushButton:hover {{ background-color: #0062A3; }}
-            QPushButton:pressed {{ background-color: #0055A0; }}
+            QPushButton:hover {{ background-color: {COLOR_ACCENT_HOVER}; }}
+            QPushButton:pressed {{ background-color: {COLOR_ACCENT_PRESSED}; }}
             QPushButton:disabled {{ background-color: {COLOR_BUTTON_BG}; color: {COLOR_TEXT_SECONDARY}; }}
             """
         )
@@ -344,11 +352,11 @@ class ResultViewer(QWidget):
         for line in ndiff(left_lines, right_lines):
             if line.startswith("- "):
                 rows.append(
-                    f'<div style="background:#4a1f1f;">- {escape(line[2:])}</div>'
+                    f'<div style="background:{COLOR_DIFF_REMOVED_BG};">- {escape(line[2:])}</div>'
                 )
             elif line.startswith("+ "):
                 rows.append(
-                    f'<div style="background:#1f4a2a;">+ {escape(line[2:])}</div>'
+                    f'<div style="background:{COLOR_DIFF_ADDED_BG};">+ {escape(line[2:])}</div>'
                 )
             elif line.startswith("  "):
                 rows.append(f"<div>{escape(line[2:])}</div>")
@@ -497,10 +505,14 @@ class ResultViewer(QWidget):
     def display_error(self, error: str) -> None:
         self._result_browser.setHtml(
             """
-            <div style="color: #FF6B6B; padding: 16px; border-left: 4px solid #FF6B6B; background-color: rgba(255, 107, 107, 0.1);">
+            <div style="color: {error_color}; padding: 16px; border-left: 4px solid {error_color}; background-color: {error_background};">
                 <strong>Error:</strong> {error}
             </div>
-            """.format(error=escape(error))
+            """.format(
+                error=escape(error),
+                error_color=COLOR_ERROR,
+                error_background=COLOR_ERROR_SOFT,
+            )
         )
 
     def _load_models(self) -> None:

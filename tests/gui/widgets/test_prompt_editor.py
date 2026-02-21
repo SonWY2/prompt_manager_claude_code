@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QPlainTextEdit, QTabWidget
 from PySide6.QtTest import QTest
 
 from src.gui.widgets.prompt_editor import PromptEditor
+from src.gui.widgets.prompt_highlighter import VariableSyntaxHighlighter
 
 
 class TestPromptEditor:
@@ -278,3 +279,12 @@ class TestPromptEditor:
             assert key_item is not None
             detected_keys.add(key_item.text())
         assert detected_keys == {"name", "city"}
+
+    def test_variable_highlighters_attached(self, qtbot):
+        widget = PromptEditor()
+        qtbot.addWidget(widget)
+        widget.show()
+
+        assert len(widget._highlighters) == 2
+        for highlighter in widget._highlighters:
+            assert isinstance(highlighter, VariableSyntaxHighlighter)
