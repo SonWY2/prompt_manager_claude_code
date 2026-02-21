@@ -10,12 +10,15 @@ TaskNavigator 위젯 테스트
 - 태스크 선택 강조
 """
 
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidget
 from PySide6.QtTest import QTest
 
-from src.gui.widgets.task_navigator import TaskNavigator
+from src.gui.widgets.task_navigator import (
+    TASK_ITEM_SEARCH_TEXT_ROLE,
+    TASK_ITEM_META_TEXT_ROLE,
+    TaskNavigator,
+)
 
 
 class TestTaskNavigator:
@@ -52,8 +55,24 @@ class TestTaskNavigator:
         assert widget._task_list.count() == 1
 
         item = widget._task_list.item(0)
-        assert "Test Task" in item.text()
-        assert "1.0" in item.text()
+        assert item.text() == "Test Task"
+        assert "Test Task" in str(item.data(TASK_ITEM_SEARCH_TEXT_ROLE))
+        assert "1.0" in str(item.data(TASK_ITEM_SEARCH_TEXT_ROLE))
+
+        assert item.data(TASK_ITEM_META_TEXT_ROLE) == "v1.0"
+
+        assert widget._task_list.itemWidget(item) is None
+
+    def test_task_title_and_meta_have_visual_variation(self, qtbot):
+        widget = TaskNavigator()
+        qtbot.addWidget(widget)
+        widget.show()
+
+        widget.add_task("Customer Support Bot", "1.0", "desc")
+        item = widget._task_list.item(0)
+        assert widget._task_list.itemWidget(item) is None
+        assert item.text() == "Customer Support Bot"
+        assert item.data(TASK_ITEM_META_TEXT_ROLE) == "v1.0 • desc"
 
     def test_search_functionality(self, qtbot):
         """검색 기능 테스트"""

@@ -35,10 +35,19 @@ QMenuBar::item {
     padding: 6px 12px;
     border-radius: 6px;
     margin-right: 4px;
+    border-bottom: 2px solid transparent;
 }
 
 QMenuBar::item:selected {
-    background-color: @COLOR_SURFACE_HOVER_STRONG@;
+    background-color: transparent;
+    color: @COLOR_ACCENT@;
+    border-bottom: 2px solid @COLOR_ACCENT@;
+}
+
+QMenuBar::item:pressed {
+    background-color: transparent;
+    color: @COLOR_ACCENT@;
+    border-bottom: 2px solid @COLOR_ACCENT@;
 }
 
 QMenu {

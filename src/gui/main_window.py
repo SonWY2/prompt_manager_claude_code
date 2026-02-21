@@ -1,73 +1,151 @@
-"""
-[overview]
-메인 윈도우
+"""[overview] 메인 윈도우: 3단 QSplitter 레이아웃과 Modern Dark Mode 테마가 적용된 GUI의 진입점. [description] 이 파일은 메인 윈도우의 UI 구성과 시그널 연결, 태스크 및 버전 관리 연동 로직을 제공합니다."""
 
-[description]
-3단 QSplitter 레이아웃과 Modern Dark Mode 테마가 적용된 메인 윈도우
-"""
+from __future__ import annotations
+from typing import Optional, cast
 
-from typing import Optional
-
-import requests
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QDialog,
+    QInputDialog,
     QMainWindow,
-    QSplitter,
-    QToolBar,
+    QMessageBox,
+    QStatusBar,
 )
-
-from src.gui.widgets.task_navigator import TaskNavigator
-from src.gui.widgets.prompt_editor import PromptEditor
-from src.gui.widgets.result_viewer import ResultViewer
-from src.gui.widgets.provider_management_widget import ProviderManagementWidget
-from src.gui.theme import get_main_window_stylesheet
-from src.core.task_manager import TaskManager
+from src.core.prompt_snapshot import (
+    deserialize_prompt_snapshot,
+    serialize_prompt_snapshot,
+)
 from src.core.provider_manager import ProviderManager
-from src.core.llm_service import LLMService
-from src.core.template_engine import TemplateEngine
-from PySide6.QtWidgets import QInputDialog, QDialog, QVBoxLayout
-
-
-MAIN_WINDOW_MIN_WIDTH: int = 1200
-MAIN_WINDOW_MIN_HEIGHT: int = 800
-SPLITTER_SIZE_NAVIGATOR: int = 250
-SPLITTER_SIZE_EDITOR: int = 600
-SPLITTER_SIZE_VIEWER: int = 350
-SPLITTER_SIZE_COLLAPSED: int = 0
+from src.core.task_manager import TaskManager
+from src.core.version_manager import VersionManager
+from src.gui.main_window_ui import (
+    SPLITTER_SIZE_EDITOR,
+    SPLITTER_SIZE_NAVIGATOR,
+    SPLITTER_SIZE_VIEWER,
+    open_provider_settings_dialog,
+    setup_layout,
+    setup_menu_bar,
+    setup_tool_bar,
+)
+from src.gui.main_window_constants import (
+    MAIN_WINDOW_MIN_HEIGHT,
+    MAIN_WINDOW_MIN_WIDTH,
+    MAIN_WINDOW_TITLE,
+    SPLITTER_SIZE_COLLAPSED,
+    STATUS_MESSAGE_TIMEOUT_MS,
+    TASK_DELETE_DIALOG_TITLE,
+    VERSION_SELECTOR_DATA_CURRENT,
+    VERSION_SELECTOR_DATA_DB_PREFIX,
+)
+from src.gui.main_window_helpers import ask_text_input, get_version_display_text
+from src.gui.main_window_helpers import (
+    position_dialog_at_parent_center,
+    refresh_version_selector,
+)
+from src.gui.prompt_runner import run_prompt_with_viewer
+from src.gui.theme import get_main_window_stylesheet
+from src.gui.widgets.new_task_dialog import NewTaskDialog
+from src.gui.widgets.task_navigator import TaskNavigator
 
 
 class MainWindow(QMainWindow):
-    """메인 윈도우 클래스"""
-
     def __init__(self) -> None:
-        """MainWindow 초기화"""
         super().__init__()
+        status_bar = QStatusBar(self)
+        status_bar.setSizeGripEnabled(False)
+        self.setStatusBar(status_bar)
 
-        self.setWindowTitle("Prompt Manager")
+        self.setWindowTitle(MAIN_WINDOW_TITLE)
         self.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT)
         self.setStyleSheet(get_main_window_stylesheet())
 
+        self._save_action = QAction("&Save", self)
+        self._save_action.setShortcut("Ctrl+S")
+        self._save_action.setStatusTip("Save current task")
+
         self._current_task_id: Optional[str] = None
+        self._selected_version_key: str = VERSION_SELECTOR_DATA_CURRENT
+        self._is_task_list_mutation_in_progress: bool = False
+
         self._task_manager = TaskManager()
         self._provider_manager = ProviderManager()
+        self._version_manager = VersionManager()
+
+        self._task_navigator: TaskNavigator
 
         self._setup_ui()
         self._connect_signals()
 
         self._load_tasks()
+        if self._current_task_id is None:
+            self._refresh_version_selector()
 
     def _setup_ui(self) -> None:
-        """UI 설정"""
-        self._setup_menu_bar()
-        self._setup_tool_bar()
-        self._setup_layout()
+        (
+            self._main_splitter,
+            task_navigator,
+            self._prompt_editor,
+            self._result_viewer,
+        ) = setup_layout(self, self._provider_manager)
+
+        self._task_navigator = cast(TaskNavigator, task_navigator)
+
+        setup_menu_bar(
+            self,
+            save_action=self._save_action,
+            on_new_task=self._on_new_task,
+            on_rename_version=self._on_rename_version_clicked,
+            on_toggle_navigator=self._toggle_navigator,
+            on_toggle_editor=self._toggle_editor,
+            on_toggle_viewer=self._toggle_viewer,
+            on_toggle_fullscreen=self._toggle_fullscreen,
+            on_provider_settings=self._on_provider_settings,
+        )
+        setup_tool_bar(
+            self,
+            save_action=self._save_action,
+            on_new_task=self._on_new_task,
+        )
+
+    def _connect_signals(self) -> None:
+        self._task_navigator.task_selected.connect(self._on_task_selected)
+        self._task_navigator.new_task_clicked.connect(self._on_new_task)
+        self._task_navigator.task_rename_requested.connect(
+            self._on_task_rename_requested
+        )
+        self._task_navigator.task_delete_requested.connect(
+            self._on_task_delete_requested
+        )
+        self._prompt_editor.prompt_changed.connect(self._on_prompt_changed)
+        self._prompt_editor.save_clicked.connect(self._on_save_clicked)
+        self._prompt_editor.new_version_clicked.connect(self._on_new_version_clicked)
+        self._prompt_editor.rename_version_clicked.connect(
+            self._on_rename_version_clicked
+        )
+        self._prompt_editor.version_changed.connect(self._on_version_changed)
+        self._result_viewer.run_clicked.connect(self._on_run_clicked)
+        self._save_action.triggered.connect(
+            lambda _checked=False: self._on_save_clicked()
+        )
+        self._set_save_enabled(False)
+
+    def _set_save_enabled(self, enabled: bool) -> None:
+        self._save_action.setEnabled(enabled)
+        self._prompt_editor.set_toolbar_buttons_enabled(
+            save_enabled=enabled,
+            new_version_enabled=self._current_task_id is not None,
+            rename_version_enabled=self._selected_version_key.startswith(
+                VERSION_SELECTOR_DATA_DB_PREFIX
+            )
+            and self._current_task_id is not None,
+        )
 
     def _load_tasks(self) -> None:
         self._task_navigator.clear_tasks()
-
-        tasks = self._task_manager.get_all_tasks()
-        for task in tasks:
+        first_task_id: str | None = None
+        for task in self._task_manager.get_all_tasks():
+            if first_task_id is None:
+                first_task_id = task.id
             self._task_navigator.add_task(
                 name=task.name,
                 version="1.0",
@@ -75,366 +153,386 @@ class MainWindow(QMainWindow):
                 task_id=task.id,
             )
 
-    def _setup_menu_bar(self) -> None:
-        """메뉴바 설정"""
-        menubar = self.menuBar()
-
-        # File 메뉴
-        file_menu = menubar.addMenu("&File")
-        file_menu.setObjectName("File")
-
-        new_task_action = QAction("&New Task", self)
-        new_task_action.setShortcut("Ctrl+T")
-        new_task_action.setStatusTip("Create a new task")
-        file_menu.addAction(new_task_action)
-
-        file_menu.addSeparator()
-
-        save_action = QAction("&Save", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.setStatusTip("Save current task")
-        file_menu.addAction(save_action)
-
-        exit_action = QAction("E&xit", self)
-        exit_action.setShortcut("Ctrl+Q")
-        exit_action.setStatusTip("Exit application")
-        file_menu.addAction(exit_action)
-
-        # Edit 메뉴
-        edit_menu = menubar.addMenu("&Edit")
-        edit_menu.setObjectName("Edit")
-
-        undo_action = QAction("&Undo", self)
-        undo_action.setShortcut("Ctrl+Z")
-        edit_menu.addAction(undo_action)
-
-        redo_action = QAction("&Redo", self)
-        redo_action.setShortcut("Ctrl+Y")
-        edit_menu.addAction(redo_action)
-
-        # View 메뉴
-        view_menu = menubar.addMenu("&View")
-        view_menu.setObjectName("View")
-
-        toggle_navigator_action = QAction("Toggle &Navigator", self)
-        toggle_navigator_action.setShortcut("Ctrl+1")
-        toggle_navigator_action.setCheckable(True)
-        toggle_navigator_action.setChecked(True)
-        toggle_navigator_action.triggered.connect(self._toggle_navigator)
-        view_menu.addAction(toggle_navigator_action)
-
-        toggle_editor_action = QAction("Toggle &Editor", self)
-        toggle_editor_action.setShortcut("Ctrl+2")
-        toggle_editor_action.setCheckable(True)
-        toggle_editor_action.setChecked(True)
-        toggle_editor_action.triggered.connect(self._toggle_editor)
-        view_menu.addAction(toggle_editor_action)
-
-        toggle_viewer_action = QAction("Toggle &Viewer", self)
-        toggle_viewer_action.setShortcut("Ctrl+3")
-        toggle_viewer_action.setCheckable(True)
-        toggle_viewer_action.setChecked(True)
-        toggle_viewer_action.triggered.connect(self._toggle_viewer)
-        view_menu.addAction(toggle_viewer_action)
-
-        view_menu.addSeparator()
-
-        fullscreen_action = QAction("&Full Screen", self)
-        fullscreen_action.setShortcut("F11")
-        fullscreen_action.triggered.connect(self._toggle_fullscreen)
-        view_menu.addAction(fullscreen_action)
-
-        settings_menu = menubar.addMenu("&Settings")
-        settings_menu.setObjectName("Settings")
-
-        provider_settings_action = QAction("&LLM Providers", self)
-        provider_settings_action.setStatusTip("Manage LLM providers")
-        provider_settings_action.triggered.connect(self._on_provider_settings)
-        settings_menu.addAction(provider_settings_action)
-
-    def _setup_tool_bar(self) -> None:
-        """툴바 설정"""
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
-
-        # New Task 버튼
-        new_task_action = QAction("New Task", self)
-        new_task_action.setStatusTip("Create a new task")
-        toolbar.addAction(new_task_action)
-
-        toolbar.addSeparator()
-
-        # Save 버튼
-        save_action = QAction("Save", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.setStatusTip("Save current task")
-        toolbar.addAction(save_action)
-
-        toolbar.addSeparator()
-
-        # Run 버튼
-        run_action = QAction("Run", self)
-        run_action.setShortcut("F5")
-        run_action.setStatusTip("Run prompt")
-        toolbar.addAction(run_action)
-
-    def _setup_layout(self) -> None:
-        """3단 QSplitter 레이아웃 설정"""
-        self._main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._main_splitter.setHandleWidth(1)
-        self._main_splitter.setObjectName("main_splitter")
-
-        # 왼쪽 패널: Task Navigator
-        self._task_navigator = TaskNavigator()
-        self._main_splitter.addWidget(self._task_navigator)
-
-        # 중앙 패널: Prompt Editor
-        self._prompt_editor = PromptEditor()
-        self._main_splitter.addWidget(self._prompt_editor)
-
-        # 오른쪽 패널: Result Viewer
-        self._result_viewer = ResultViewer(self._provider_manager)
-        self._main_splitter.addWidget(self._result_viewer)
-
-        # 초기 비율 설정
-        self._main_splitter.setStretchFactor(0, 0)
-        self._main_splitter.setStretchFactor(1, 1)
-        self._main_splitter.setStretchFactor(2, 0)
-        self._main_splitter.setSizes(
-            [
-                SPLITTER_SIZE_NAVIGATOR,
-                SPLITTER_SIZE_EDITOR,
-                SPLITTER_SIZE_VIEWER,
-            ]
-        )
-
-        self.setCentralWidget(self._main_splitter)
-
-    def _connect_signals(self) -> None:
-        """시그널 연결"""
-        self._task_navigator.task_selected.connect(self._on_task_selected)
-        self._task_navigator.new_task_clicked.connect(self._on_new_task)
-        self._prompt_editor.prompt_changed.connect(self._on_prompt_changed)
-        self._result_viewer.run_clicked.connect(self._on_run_clicked)
-
-        for action in self.findChildren(QAction):
-            if action.text() == "&New Task" or action.text() == "New Task":
-                action.triggered.connect(self._on_new_task)
+        if first_task_id is not None and self._current_task_id is None:
+            self._task_navigator.select_task(first_task_id)
 
     def _on_task_selected(self, task_id: str) -> None:
-        """태스크 선택 핸들러
+        if self._is_task_list_mutation_in_progress:
+            return
+        if task_id == self._current_task_id:
+            return
 
-        Args:
-            task_id: 선택된 태스크 ID
-        """
+        if self._current_task_id is not None and self.isWindowModified():
+            self._save_current_task_prompt()
+
         self._current_task_id = task_id
+        self._load_current_task_prompt()
+
+    def _on_task_rename_requested(self, task_id: str) -> None:
+        task = self._task_manager.get_task(task_id)
+        if task is None:
+            self.statusBar().showMessage("Task not found", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        new_name, ok = self._ask_text_input("Rename Task", "Task name:", task.name)
+        if not ok:
+            return
+
+        updated = self._task_manager.rename_task(task_id=task_id, new_name=new_name)
+        if updated is None:
+            self.statusBar().showMessage("Rename failed", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        self._task_navigator.update_task_name(task_id, updated.name)
+        self.statusBar().showMessage("Renamed", STATUS_MESSAGE_TIMEOUT_MS)
+
+    def _on_task_delete_requested(self, task_id: str) -> None:
+        task = self._task_manager.get_task(task_id)
+        if task is None:
+            self.statusBar().showMessage("Task not found", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        if self.isWindowModified() and self._current_task_id == task_id:
+            self._save_current_task_prompt()
+
+        delete_dialog = QMessageBox(self)
+        delete_dialog.setWindowTitle(TASK_DELETE_DIALOG_TITLE)
+        delete_dialog.setText(
+            f"Delete '{task.name}'?\n\nThis will archive the task and hide it from the list."
+        )
+        delete_dialog.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+        )
+        delete_dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        position_dialog_at_parent_center(self, delete_dialog)
+
+        result = delete_dialog.exec()
+        if result != QMessageBox.StandardButton.Yes:
+            return
+
+        self._is_task_list_mutation_in_progress = True
+        try:
+            archived = self._task_manager.archive_task(task_id)
+            if not archived:
+                self.statusBar().showMessage("Delete failed", STATUS_MESSAGE_TIMEOUT_MS)
+                return
+
+            self._task_navigator.remove_task(task_id)
+
+            if self._current_task_id == task_id:
+                self._current_task_id = None
+                self._selected_version_key = VERSION_SELECTOR_DATA_CURRENT
+                self._prompt_editor.set_editors_read_only(False)
+                self._prompt_editor.clear_prompts_silently()
+                self.setWindowModified(False)
+                self._set_save_enabled(False)
+                self._refresh_version_selector()
+        finally:
+            self._is_task_list_mutation_in_progress = False
+
+        next_task_id = self._task_navigator.get_selected_task_id()
+        if next_task_id is not None:
+            self._on_task_selected(next_task_id)
+        self.statusBar().showMessage("Deleted", STATUS_MESSAGE_TIMEOUT_MS)
 
     def _on_new_task(self) -> None:
-        """새 태스크 생성 핸들러"""
-        task_name, ok = QInputDialog.getText(
-            self,
-            "New Task",
-            "Enter task name:",
+        if self._current_task_id is not None and self.isWindowModified():
+            self._save_current_task_prompt()
+
+        dialog = NewTaskDialog(self)
+        dialog.center_on_parent_or_screen()
+        task_name = (
+            dialog.task_name if dialog.exec() == QDialog.DialogCode.Accepted else ""
+        )
+        if not task_name:
+            return
+
+        task = self._task_manager.create_task(name=task_name, description=None)
+        self._task_navigator.add_task(
+            name=task.name,
+            version="1.0",
+            description=task.description,
+            task_id=task.id,
         )
 
-        if ok and task_name.strip():
-            task = self._task_manager.create_task(
-                name=task_name.strip(),
-                description=None,
-            )
+        self._current_task_id = task.id
+        self._selected_version_key = VERSION_SELECTOR_DATA_CURRENT
+        self._prompt_editor.set_editors_read_only(False)
+        self._prompt_editor.clear_prompts_silently()
+        self.setWindowModified(False)
+        self._set_save_enabled(False)
+        self._refresh_version_selector()
 
-            self._task_navigator.add_task(
-                name=task.name,
-                version="1.0",
-                description=task.description,
-                task_id=task.id,
-            )
-
-            self._current_task_id = task.id
-            self._prompt_editor.clear_prompts()
-
-    def _on_prompt_changed(self, prompt_type: str) -> None:
-        """프롬프트 변경 핸들러
-
-        Args:
-            prompt_type: 변경된 프롬프트 타입 ("system" 또는 "user")
-        """
+    def _on_prompt_changed(self, _prompt_type: str) -> None:
         if self._current_task_id is None:
             return
 
         self.setWindowModified(True)
+        self._set_save_enabled(True)
 
-    def _on_run_clicked(self, model: str) -> None:
-        """RUN 버튼 클릭 핸들러
+    def _on_save_clicked(self) -> None:
+        self._save_current_task_prompt()
 
-        Args:
-            model: 선택된 모델 이름
-        """
+    def _save_current_task_prompt(self) -> None:
         if self._current_task_id is None:
-            self._result_viewer.display_error("No task selected")
+            self.statusBar().showMessage("No task selected", STATUS_MESSAGE_TIMEOUT_MS)
             return
 
         system_prompt = self._prompt_editor.get_system_prompt()
         user_prompt = self._prompt_editor.get_user_prompt()
-        template_variables = self._prompt_editor.get_variable_values()
 
-        if not system_prompt and not user_prompt:
-            self._result_viewer.display_error("Prompt is empty")
-            return
-
-        self._result_viewer.set_loading(True)
-
-        try:
-            provider_id = self._result_viewer.get_selected_provider_id()
-            if provider_id is None:
-                self._result_viewer.display_error(
-                    "No provider selected. Configure and select a provider first."
+        if self._selected_version_key == VERSION_SELECTOR_DATA_CURRENT:
+            saved = self._task_manager.save_task_prompt(
+                task_id=self._current_task_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+            if saved is None:
+                self.statusBar().showMessage(
+                    "Save failed: task not found", STATUS_MESSAGE_TIMEOUT_MS
                 )
                 return
 
-            provider = self._provider_manager.get_provider(provider_id)
-            if provider is None:
-                self._result_viewer.display_error("Selected provider not found")
+            self.setWindowModified(False)
+            self._set_save_enabled(False)
+            self.statusBar().showMessage("Saved", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        if self._selected_version_key.startswith(VERSION_SELECTOR_DATA_DB_PREFIX):
+            version_id = self._selected_version_key.removeprefix(
+                VERSION_SELECTOR_DATA_DB_PREFIX
+            )
+            snapshot = serialize_prompt_snapshot(system_prompt, user_prompt)
+            updated = self._version_manager.update_version_content(version_id, snapshot)
+            if updated is None:
+                self.statusBar().showMessage(
+                    "Save failed: version not found", STATUS_MESSAGE_TIMEOUT_MS
+                )
                 return
 
-            llm_service = LLMService(provider)
-            rendered_system_prompt = TemplateEngine(system_prompt).render(
-                template_variables
+            self.setWindowModified(False)
+            self._set_save_enabled(False)
+            self.statusBar().showMessage(
+                f"Saved {get_version_display_text(updated.version_number, updated.version_name)}",
+                STATUS_MESSAGE_TIMEOUT_MS,
             )
-            rendered_user_prompt = TemplateEngine(user_prompt).render(
-                template_variables
-            )
-            rendered_prompt = f"System Prompt:\n{rendered_system_prompt}\n\nUser Prompt:\n{rendered_user_prompt}"
-            result = llm_service.call_llm(rendered_prompt)
+            return
 
-            output = str(result.get("output", ""))
-            execution_time_ms = int(result.get("execution_time_ms", 0))
-            tokens_used = result.get("tokens_used")
+        self.statusBar().showMessage("Save failed", STATUS_MESSAGE_TIMEOUT_MS)
 
-            self._result_viewer.display_result(output)
-            latency_seconds = execution_time_ms / 1000
-            input_tokens = len(rendered_system_prompt.split()) + len(
-                rendered_user_prompt.split()
+    def _load_current_task_prompt(self) -> None:
+        if self._current_task_id is None:
+            return
+
+        self._selected_version_key = VERSION_SELECTOR_DATA_CURRENT
+        prompt = self._task_manager.get_latest_task_prompt(self._current_task_id)
+        system_prompt = "" if prompt is None else prompt.system_prompt
+        user_prompt = "" if prompt is None else prompt.user_prompt
+        self._prompt_editor.set_editors_read_only(False)
+        self._prompt_editor.set_prompts_silently(system_prompt, user_prompt)
+        self.setWindowModified(False)
+        self._set_save_enabled(False)
+        self._refresh_version_selector()
+
+    def _refresh_version_selector(self) -> None:
+        self._selected_version_key = refresh_version_selector(
+            selector=self._prompt_editor._version_selector,
+            task_manager=self._task_manager,
+            version_manager=self._version_manager,
+            current_task_id=self._current_task_id,
+            selected_version_key=self._selected_version_key,
+            version_selector_data_current=VERSION_SELECTOR_DATA_CURRENT,
+            version_selector_data_db_prefix=VERSION_SELECTOR_DATA_DB_PREFIX,
+        )
+
+    def _on_new_version_clicked(self) -> None:
+        if self._current_task_id is None:
+            self.statusBar().showMessage("No task selected", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        if (
+            self._selected_version_key == VERSION_SELECTOR_DATA_CURRENT
+            and self.isWindowModified()
+        ):
+            self._save_current_task_prompt()
+
+        version_name_raw, ok = self._ask_text_input(
+            "New Version", "Version name (optional):"
+        )
+        version_name: str | None = version_name_raw.strip() or None
+        if not ok:
+            return
+
+        prompt = self._task_manager.get_latest_task_prompt(self._current_task_id)
+        if prompt is None:
+            prompt = self._task_manager.save_task_prompt(
+                task_id=self._current_task_id,
+                system_prompt=self._prompt_editor.get_system_prompt(),
+                user_prompt=self._prompt_editor.get_user_prompt(),
             )
-            output_tokens = int(tokens_used or 0)
-            self._result_viewer.set_metrics(
-                latency=latency_seconds,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost=0.0,
+        if prompt is None:
+            self.statusBar().showMessage(
+                "New version failed: prompt not found", STATUS_MESSAGE_TIMEOUT_MS
             )
-            self._result_viewer.add_to_history(
-                output,
-                model=model,
-                latency=latency_seconds,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost=0.0,
+            return
+
+        snapshot = serialize_prompt_snapshot("", "")
+        version = self._version_manager.create_version(
+            prompt_id=prompt.id,
+            content=snapshot,
+            version_name=version_name,
+        )
+        self._selected_version_key = f"{VERSION_SELECTOR_DATA_DB_PREFIX}{version.id}"
+        self._refresh_version_selector()
+        self._prompt_editor.set_editors_read_only(False)
+        self._prompt_editor.set_prompts_silently("", "")
+        self.setWindowModified(False)
+        self._set_save_enabled(False)
+        self.statusBar().showMessage(
+            f"Created {get_version_display_text(version.version_number, version.version_name)}",
+            STATUS_MESSAGE_TIMEOUT_MS,
+        )
+
+    def _on_rename_version_clicked(self) -> None:
+        if self._current_task_id is None:
+            self.statusBar().showMessage("No task selected", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        if not self._selected_version_key.startswith(VERSION_SELECTOR_DATA_DB_PREFIX):
+            self.statusBar().showMessage(
+                "Select a saved version to rename", STATUS_MESSAGE_TIMEOUT_MS
             )
-        except requests.exceptions.RequestException as e:
-            self._result_viewer.display_error(f"LLM request failed: {str(e)}")
-        except ValueError as e:
-            self._result_viewer.display_error(f"Invalid LLM response: {str(e)}")
-        except RuntimeError as e:
-            self._result_viewer.display_error(f"Execution failed: {str(e)}")
-        except KeyError as e:
-            self._result_viewer.display_error(f"Response missing field: {str(e)}")
-        except TypeError as e:
-            self._result_viewer.display_error(str(e))
-        finally:
-            self._result_viewer.set_loading(False)
+            return
+
+        version_id = self._selected_version_key.removeprefix(
+            VERSION_SELECTOR_DATA_DB_PREFIX
+        )
+        version = self._version_manager.get_version(version_id)
+        if version is None:
+            self.statusBar().showMessage("Version not found", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        version_name_raw, ok = self._ask_text_input(
+            "Rename Version",
+            "Version name:",
+            version.version_name,
+        )
+        if not ok:
+            return
+
+        try:
+            updated = self._version_manager.update_version_name(
+                version_id=version_id,
+                version_name=version_name_raw,
+            )
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc), STATUS_MESSAGE_TIMEOUT_MS)
+            return
+        if updated is None:
+            self.statusBar().showMessage("Rename failed", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        self._selected_version_key = f"{VERSION_SELECTOR_DATA_DB_PREFIX}{updated.id}"
+        self._refresh_version_selector()
+        self._set_save_enabled(self._save_action.isEnabled())
+        self.statusBar().showMessage(
+            f"Renamed to {get_version_display_text(updated.version_number, updated.version_name)}",
+            STATUS_MESSAGE_TIMEOUT_MS,
+        )
+
+    def _on_version_changed(self, version_key: str) -> None:
+        if self._current_task_id is None:
+            return
+        if version_key == self._selected_version_key:
+            return
+
+        if self.isWindowModified():
+            self._save_current_task_prompt()
+
+        if version_key == VERSION_SELECTOR_DATA_CURRENT:
+            self._load_current_task_prompt()
+            return
+        if not version_key.startswith(VERSION_SELECTOR_DATA_DB_PREFIX):
+            return
+
+        version_id = version_key.removeprefix(VERSION_SELECTOR_DATA_DB_PREFIX)
+        version = self._version_manager.get_version(version_id)
+        if version is None:
+            self.statusBar().showMessage("Version not found", STATUS_MESSAGE_TIMEOUT_MS)
+            return
+
+        self._selected_version_key = version_key
+        system_prompt, user_prompt = deserialize_prompt_snapshot(version.content)
+        self._prompt_editor.set_editors_read_only(False)
+        self._prompt_editor.set_prompts_silently(system_prompt, user_prompt)
+        self.setWindowModified(False)
+        self._set_save_enabled(False)
+        self.statusBar().showMessage(
+            f"Loaded {get_version_display_text(version.version_number, version.version_name)}",
+            STATUS_MESSAGE_TIMEOUT_MS,
+        )
+
+    def _on_run_clicked(self, model: str) -> None:
+        if self._current_task_id is None:
+            self._result_viewer.display_error("No task selected")
+            return
+        if self.isWindowModified():
+            self._save_current_task_prompt()
+
+        run_prompt_with_viewer(
+            provider_manager=self._provider_manager,
+            result_viewer=self._result_viewer,
+            prompt_editor=self._prompt_editor,
+            model=model,
+        )
 
     def _toggle_navigator(self, visible: bool) -> None:
-        """Task Navigator 토글
-
-        Args:
-            visible: 표시 여부
-        """
         if not visible:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_COLLAPSED,
-                    SPLITTER_SIZE_EDITOR,
-                    SPLITTER_SIZE_VIEWER,
-                ]
+                [SPLITTER_SIZE_COLLAPSED, SPLITTER_SIZE_EDITOR, SPLITTER_SIZE_VIEWER]
             )
         else:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_NAVIGATOR,
-                    SPLITTER_SIZE_EDITOR,
-                    SPLITTER_SIZE_VIEWER,
-                ]
+                [SPLITTER_SIZE_NAVIGATOR, SPLITTER_SIZE_EDITOR, SPLITTER_SIZE_VIEWER]
             )
 
     def _toggle_editor(self, visible: bool) -> None:
-        """Prompt Editor 토글
-
-        Args:
-            visible: 표시 여부
-        """
         if not visible:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_NAVIGATOR,
-                    SPLITTER_SIZE_COLLAPSED,
-                    SPLITTER_SIZE_VIEWER,
-                ]
+                [SPLITTER_SIZE_NAVIGATOR, SPLITTER_SIZE_COLLAPSED, SPLITTER_SIZE_VIEWER]
             )
         else:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_NAVIGATOR,
-                    SPLITTER_SIZE_EDITOR,
-                    SPLITTER_SIZE_VIEWER,
-                ]
+                [SPLITTER_SIZE_NAVIGATOR, SPLITTER_SIZE_EDITOR, SPLITTER_SIZE_VIEWER]
             )
 
     def _toggle_viewer(self, visible: bool) -> None:
-        """Result Viewer 토글
-
-        Args:
-            visible: 표시 여부
-        """
         if not visible:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_NAVIGATOR,
-                    SPLITTER_SIZE_EDITOR,
-                    SPLITTER_SIZE_COLLAPSED,
-                ]
+                [SPLITTER_SIZE_NAVIGATOR, SPLITTER_SIZE_EDITOR, SPLITTER_SIZE_COLLAPSED]
             )
         else:
             self._main_splitter.setSizes(
-                [
-                    SPLITTER_SIZE_NAVIGATOR,
-                    SPLITTER_SIZE_EDITOR,
-                    SPLITTER_SIZE_VIEWER,
-                ]
+                [SPLITTER_SIZE_NAVIGATOR, SPLITTER_SIZE_EDITOR, SPLITTER_SIZE_VIEWER]
             )
 
     def _toggle_fullscreen(self) -> None:
-        """전체화면 토글"""
         if self.isFullScreen():
             self.showNormal()
         else:
             self.showFullScreen()
 
     def _on_provider_settings(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("LLM Provider Settings")
-        dialog.setMinimumSize(1100, 700)
+        open_provider_settings_dialog(
+            parent=self,
+            provider_manager=self._provider_manager,
+            on_accepted=self._result_viewer.refresh_models,
+        )
 
-        layout = QVBoxLayout()
-        provider_management = ProviderManagementWidget(self._provider_manager)
-        layout.addWidget(provider_management)
-        dialog.setLayout(layout)
-
-        provider_management.load_providers()
-
-        result = dialog.exec()
-
-        # Provider 설정이 변경되었으므로 모델 목록 새로고침
-        if result == QDialog.DialogCode.Accepted:
-            self._result_viewer.refresh_models()
+    def _ask_text_input(
+        self, title: str, label: str, text: str | None = None
+    ) -> tuple[str, bool]:
+        default_text = text if text is not None else ""
+        return ask_text_input(
+            self, title, label, default_text, dialog_class=QInputDialog
+        )

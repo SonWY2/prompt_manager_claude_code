@@ -44,4 +44,5 @@ htmlcov/
 # Data (database files)
 data/
 *.json
+opencode.json.bak
 !package.json

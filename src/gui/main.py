@@ -8,12 +8,13 @@ QApplication 초기화 및 MainWindow 생성을 담당하는 메인 모듈
 
 from src.gui.qt_platform import configure_qt_platform
 
-configure_qt_platform()
-
 from typing import Optional, cast
 from PySide6.QtWidgets import QApplication
 
 from src.gui.main_window import MainWindow
+
+# Configure Qt platform settings after imports to satisfy Ruff E402
+configure_qt_platform()
 
 # QApplication 인스턴스 관리 (circular dependency 방지)
 _app_instance: Optional[QApplication] = None

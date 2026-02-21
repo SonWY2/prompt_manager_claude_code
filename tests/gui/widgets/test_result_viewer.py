@@ -11,6 +11,7 @@ ResultViewer 위젯 테스트
 - 이력/비교/메트릭 탭
 """
 
+from unittest.mock import Mock
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QTextBrowser, QComboBox, QPushButton, QTabWidget
 from PySide6.QtTest import QTest
@@ -291,3 +292,83 @@ class TestResultViewer:
         compare_html = widget._compare_browser.toHtml()
         assert "First result" in compare_html
         assert "Second result" in compare_html
+
+
+    def test_get_selected_provider_id_with_data(self, qtbot, monkeypatch):
+        """Provider 정보가 있을 때 선택 provider id 확인"""
+        from datetime import datetime
+
+        from src.core.provider_manager import ProviderManager
+        from src.data.models import Provider
+
+        manager = Mock(spec=ProviderManager)
+        manager.get_all_providers.return_value = [
+            Provider(
+                id="provider_1",
+                name="OpenAI",
+                description=None,
+                api_url="https://api.openai.com/v1",
+                api_key=None,
+                model="gpt-4o",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+        ]
+
+        widget = ResultViewer(manager)
+        qtbot.addWidget(widget)
+        widget.show()
+
+        # 첫 번째 아이템을 선택했을 때 provider id를 반환해야 함
+        assert widget._model_selector.currentData() == "provider_1"
+        assert widget.get_selected_provider_id() == "provider_1"
+
+    def test_get_selected_provider_id_without_provider_data(self, qtbot):
+        """ProviderManager가 없을 때 기본 모델 데이터는 None"""
+        widget = ResultViewer()
+        qtbot.addWidget(widget)
+        widget.show()
+
+        assert widget._model_selector.count() > 0
+        assert widget.get_selected_provider_id() is None
+
+    def test_refresh_models_updates_items_with_providers(self, qtbot, monkeypatch):
+        """Provider 목록 기반 model selector 재로딩 검증"""
+        from datetime import datetime
+
+        from src.core.provider_manager import ProviderManager
+        from src.data.models import Provider
+
+        manager = Mock(spec=ProviderManager)
+        manager.get_all_providers.return_value = [
+            Provider(
+                id="provider_1",
+                name="OpenAI",
+                description=None,
+                api_url="https://api.openai.com/v1",
+                api_key=None,
+                model="gpt-4o",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+            Provider(
+                id="provider_2",
+                name="Ollama",
+                description=None,
+                api_url="http://localhost:11434/v1",
+                api_key=None,
+                model="llama2",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            ),
+        ]
+
+        widget = ResultViewer(manager)
+        qtbot.addWidget(widget)
+        widget.show()
+
+        assert widget._model_selector.count() == 2
+        assert widget._model_selector.itemText(0) == "OpenAI: gpt-4o"
+        assert widget._model_selector.itemText(1) == "Ollama: llama2"
+        assert widget._model_selector.itemData(0) == "provider_1"
+        assert widget._model_selector.itemData(1) == "provider_2"

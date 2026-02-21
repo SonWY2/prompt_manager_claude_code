@@ -10,7 +10,7 @@ from src.gui.main import get_app_instance, main as create_main_window
 
 
 def main() -> None:
-    create_main_window()
+    _window = create_main_window()
     app = get_app_instance()
     app.exec()
 

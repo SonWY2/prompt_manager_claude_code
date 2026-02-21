@@ -6,6 +6,9 @@ main.py 모듈 테스트
 QApplication 초기화 및 애플리케이션 진입점 테스트
 """
 
+import gc
+import weakref
+
 from PySide6.QtWidgets import QApplication
 
 # src.gui.main은 테스트 중에 import됨
@@ -53,3 +56,28 @@ class TestMain:
         app = get_app_instance()
         # pytest-qt가 생성한 경우 applicationName은 "pytest-qt-qapp"
         assert app.applicationName() in ("Prompt Manager", "pytest-qt-qapp")
+
+    def test_root_main_keeps_window_reference_until_exec(self, monkeypatch):
+        import main as root_main
+
+        window_ref_holder: dict[str, weakref.ReferenceType[object]] = {}
+
+        class DummyWindow:
+            pass
+
+        class DummyApp:
+            def exec(self) -> int:
+                gc.collect()
+                assert "window_ref" in window_ref_holder
+                assert window_ref_holder["window_ref"]() is not None
+                return 0
+
+        def create_window() -> DummyWindow:
+            window = DummyWindow()
+            window_ref_holder["window_ref"] = weakref.ref(window)
+            return window
+
+        monkeypatch.setattr(root_main, "create_main_window", create_window)
+        monkeypatch.setattr(root_main, "get_app_instance", lambda: DummyApp())
+
+        root_main.main()

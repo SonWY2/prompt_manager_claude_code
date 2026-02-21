@@ -48,3 +48,13 @@ def generate_provider_id() -> str:
         str: provider_ 접두사가 포함된 고유 ID (예: provider_123e4567-e89b-12d3-a456-426614174000)
     """
     return f"provider_{generate_id()}"
+
+
+def generate_prompt_id() -> str:
+    """
+    Prompt 고유 ID 생성
+
+    Returns:
+        str: prompt_ 접두사가 포함된 고유 ID (예: prompt_123e4567-e89b-12d3-a456-426614174000)
+    """
+    return f"prompt_{generate_id()}"

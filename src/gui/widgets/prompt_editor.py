@@ -11,7 +11,7 @@
 """
 
 import re
-from typing import List, Dict, cast, Any
+from typing import List, Dict, Optional, cast, Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextDocument
@@ -51,7 +51,9 @@ class PromptEditor(QWidget):
     # 시그널 정의
     prompt_changed = Signal(str)
     version_changed = Signal(str)
+    save_clicked = Signal()
     new_version_clicked = Signal()
+    rename_version_clicked = Signal()
 
     def __init__(self) -> None:
         """PromptEditor 초기화"""
@@ -60,6 +62,9 @@ class PromptEditor(QWidget):
         self._versions: List[Dict[str, str]] = []
         self._variable_values: Dict[str, str] = {}
         self._highlighters: List[VariableSyntaxHighlighter] = []
+        self._save_button: Optional[QPushButton] = None
+        self._new_version_button: Optional[QPushButton] = None
+        self._rename_version_button: Optional[QPushButton] = None
 
         self._setup_ui()
         self._setup_variable_highlighting()
@@ -283,9 +288,7 @@ class PromptEditor(QWidget):
         """)
         layout.addWidget(self._version_selector)
 
-        new_version_button = QPushButton("New Version")
-        new_version_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_version_button.setStyleSheet(f"""
+        button_stylesheet = f"""
             QPushButton {{
                 background-color: {COLOR_BUTTON_BG};
                 color: {COLOR_TEXT_PRIMARY};
@@ -302,9 +305,25 @@ class PromptEditor(QWidget):
                 background-color: {COLOR_ACCENT};
                 color: white;
             }}
-        """)
-        new_version_button.clicked.connect(self.new_version_clicked.emit)
-        layout.addWidget(new_version_button)
+        """
+
+        self._save_button = QPushButton("Save")
+        self._save_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_button.setStyleSheet(button_stylesheet)
+        self._save_button.clicked.connect(self.save_clicked.emit)
+        layout.addWidget(self._save_button)
+
+        self._new_version_button = QPushButton("New Version")
+        self._new_version_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._new_version_button.setStyleSheet(button_stylesheet)
+        self._new_version_button.clicked.connect(self.new_version_clicked.emit)
+        layout.addWidget(self._new_version_button)
+
+        self._rename_version_button = QPushButton("Rename Version")
+        self._rename_version_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._rename_version_button.setStyleSheet(button_stylesheet)
+        self._rename_version_button.clicked.connect(self.rename_version_clicked.emit)
+        layout.addWidget(self._rename_version_button)
 
         layout.addStretch()
 
@@ -364,15 +383,15 @@ class PromptEditor(QWidget):
         setattr(container, "edit", edit)
         return container
 
-    def _on_version_changed(self, version: str) -> None:
-        """버전 변경 핸들러
+    def _on_version_changed(self, _text: str) -> None:
+        data = self._version_selector.currentData()
+        if data is None:
+            self.version_changed.emit("")
+            return
+        if not isinstance(data, str):
+            return
 
-        Args:
-            version: 선택된 버전
-        """
-        if version and version != "Current":
-            self.load_version(version)
-            self.version_changed.emit(version)
+        self.version_changed.emit(data)
 
     def _connect_signals(self) -> None:
         """시그널 연결"""
@@ -387,12 +406,38 @@ class PromptEditor(QWidget):
         self._version_selector.currentTextChanged.connect(self._on_version_changed)
         self._refresh_variables_panel()
 
-    def detect_variables(self) -> List[str]:
-        """프롬프트에서 변수 감지
+    def set_prompts_silently(self, system_prompt: str, user_prompt: str) -> None:
+        self._system_prompt_edit.blockSignals(True)
+        self._user_prompt_edit.blockSignals(True)
+        try:
+            self._system_prompt_edit.setPlainText(system_prompt)
+            self._user_prompt_edit.setPlainText(user_prompt)
+        finally:
+            self._system_prompt_edit.blockSignals(False)
+            self._user_prompt_edit.blockSignals(False)
+        self._refresh_variables_panel()
 
-        Returns:
-            List[str]: 감지된 변수 이름 목록
-        """
+    def clear_prompts_silently(self) -> None:
+        self.set_prompts_silently("", "")
+
+    def set_editors_read_only(self, read_only: bool) -> None:
+        self._system_prompt_edit.setReadOnly(read_only)
+        self._user_prompt_edit.setReadOnly(read_only)
+
+    def set_toolbar_buttons_enabled(
+        self,
+        save_enabled: bool,
+        new_version_enabled: bool,
+        rename_version_enabled: bool,
+    ) -> None:
+        if self._save_button is not None:
+            self._save_button.setEnabled(save_enabled)
+        if self._new_version_button is not None:
+            self._new_version_button.setEnabled(new_version_enabled)
+        if self._rename_version_button is not None:
+            self._rename_version_button.setEnabled(rename_version_enabled)
+
+    def detect_variables(self) -> List[str]:
         source_text = "\n".join(
             [
                 self._system_prompt_edit.toPlainText(),
@@ -410,51 +455,24 @@ class PromptEditor(QWidget):
         return unique_variables
 
     def get_system_prompt(self) -> str:
-        """System Prompt 반환
-
-        Returns:
-            str: System Prompt 텍스트
-        """
         return self._system_prompt_edit.toPlainText()
 
     def get_user_prompt(self) -> str:
-        """User Prompt 반환
-
-        Returns:
-            str: User Prompt 텍스트
-        """
         return self._user_prompt_edit.toPlainText()
 
     def set_system_prompt(self, text: str) -> None:
-        """System Prompt 설정
-
-        Args:
-            text: 설정할 System Prompt 텍스트
-        """
         self._system_prompt_edit.setPlainText(text)
 
     def set_user_prompt(self, text: str) -> None:
-        """User Prompt 설정
-
-        Args:
-            text: 설정할 User Prompt 텍스트
-        """
         self._user_prompt_edit.setPlainText(text)
 
     def clear_prompts(self) -> None:
-        """모든 프롬프트 초기화"""
         self._system_prompt_edit.clear()
         self._user_prompt_edit.clear()
         self._variable_values.clear()
         self._refresh_variables_panel()
 
     def add_version(self, version: str, description: str) -> None:
-        """버전 추가
-
-        Args:
-            version: 버전 번호 (예: "1.0")
-            description: 버전 설명
-        """
         self._versions.append(
             {
                 "version": version,
@@ -465,25 +483,12 @@ class PromptEditor(QWidget):
         )
 
         # 버전 드롭다운에 추가
-        self._version_selector.addItem(f"v{version}")
+        self._version_selector.addItem(f"v{version}", version)
 
     def get_versions(self) -> List[Dict[str, str]]:
-        """버전 목록 반환
-
-        Returns:
-            List[Dict[str, str]]: 버전 목록
-        """
         return self._versions
 
     def load_version(self, version: str) -> bool:
-        """특정 버전 로드
-
-        Args:
-            version: 로드할 버전 번호
-
-        Returns:
-            bool: 로드 성공 여부
-        """
         for v in self._versions:
             if v["version"] == version:
                 self.set_system_prompt(v["system_prompt"])

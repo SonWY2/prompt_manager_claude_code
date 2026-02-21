@@ -22,6 +22,7 @@ MAX_TASK_DESCRIPTION_LENGTH: Final[int] = 500
 
 # 버전 관련 상수
 MAX_VERSION_NUMBER: Final[int] = 9999
+MAX_VERSION_NAME_LENGTH: Final[int] = 100
 
 # 프롬프트 관련 상수
 MAX_PROMPT_LENGTH: Final[int] = 10000

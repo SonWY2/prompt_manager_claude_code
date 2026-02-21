@@ -79,13 +79,16 @@ class VersionManager:
         max_version = max(v.version_number for v in versions)
         return max_version + 1
 
-    def create_version(self, prompt_id: str, content: str) -> Version:
+    def create_version(
+        self, prompt_id: str, content: str, version_name: str | None = None
+    ) -> Version:
         """
         새 버전 생성
 
         Args:
             prompt_id: 프롬프트 ID
             content: 프롬프트 내용
+            version_name: 버전 이름
 
         Returns:
             생성된 버전
@@ -96,6 +99,7 @@ class VersionManager:
             prompt_id=prompt_id,
             content=content,
             version_number=version_number,
+            version_name=version_name,
         )
 
         self.version_repo.create(version)
@@ -103,10 +107,65 @@ class VersionManager:
         # Plugin hook 실행
         self._execute_plugins(
             action="create_version",
-            context={"version": version.model_dump(), "prompt_id": prompt_id},
+            context={
+                "version": version.model_dump(),
+                "version_name": version.version_name,
+                "prompt_id": prompt_id,
+            },
         )
 
         return version
+
+    def get_version(self, version_id: str) -> Version | None:
+        return self.version_repo.get(version_id)
+
+    def update_version_content(self, version_id: str, content: str) -> Version | None:
+        version = self.version_repo.get(version_id)
+        if version is None:
+            return None
+
+        updated_version = Version.model_validate(
+            {**version.model_dump(), "content": content}
+        )
+        self.version_repo.update(updated_version)
+        return updated_version
+
+    def update_version_name(
+        self, version_id: str, version_name: str | None
+    ) -> Version | None:
+        version = self.version_repo.get(version_id)
+        if version is None:
+            return None
+
+        if version_name is None:
+            raise ValueError("Version name is required")
+
+        normalized_name = version_name.strip()
+        if normalized_name == "":
+            raise ValueError("Version name is required")
+
+        versions_in_prompt = self.version_repo.get_by_prompt(version.prompt_id)
+        for existing in versions_in_prompt:
+            if existing.id == version.id:
+                continue
+            if existing.version_name == normalized_name:
+                raise ValueError("Version name already exists")
+
+        updated_version = Version.model_validate(
+            {**version.model_dump(), "version_name": normalized_name}
+        )
+        self.version_repo.update(updated_version)
+
+        self._execute_plugins(
+            action="update_version_name",
+            context={
+                "version": updated_version.model_dump(),
+                "version_name": updated_version.version_name,
+                "prompt_id": updated_version.prompt_id,
+            },
+        )
+
+        return updated_version
 
     def get_timeline(self, prompt_id: str) -> list[Version]:
         """
@@ -143,6 +202,7 @@ class VersionManager:
         restored_version = self.create_version(
             prompt_id=prompt_id,
             content=target_version.content,
+            version_name=target_version.version_name,
         )
 
         # Plugin hook 실행
@@ -157,9 +217,7 @@ class VersionManager:
 
         return restored_version
 
-    def ensure_first_version(
-        self, prompt_id: str, content: str
-    ) -> Version | None:
+    def ensure_first_version(self, prompt_id: str, content: str) -> Version | None:
         """
         첫 번째 버전 자동 생성
 

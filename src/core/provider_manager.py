@@ -10,12 +10,47 @@ ProviderRepository를 통해 데이터베이스에 접근합니다.
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, List
+from abc import ABC, abstractmethod
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from src.data.models import Provider
 from src.data.repository import ProviderRepository
 from src.utils.id_generator import generate_provider_id
+
+
+class ProviderPlugin(ABC):
+    """
+    [overview]
+    Provider 플러그인 인터페이스
+
+    [description]
+    Provider 동작 확장을 위한 인터페이스입니다.
+    """
+
+    @abstractmethod
+    def execute(self, provider_id: str, context: dict[str, Any]) -> dict[str, Any]:
+        """
+        플러그인 실행
+
+        Args:
+            provider_id: Provider ID
+            context: 실행 컨텍스트
+
+        Returns:
+            수정된 컨텍스트
+        """
+        pass
+
+    @abstractmethod
+    def get_name(self) -> str:
+        """
+        플러그인 이름 반환
+
+        Returns:
+            플러그인 이름
+        """
+        pass
 
 
 class ProviderManager:
@@ -38,6 +73,33 @@ class ProviderManager:
             db_path: 데이터베이스 파일 경로
         """
         self.provider_repository = ProviderRepository(db_path)
+        self.plugins: List[ProviderPlugin] = []
+
+    def register_plugin(self, plugin: ProviderPlugin) -> None:
+        """
+        플러그인 등록
+
+        Args:
+            plugin: 등록할 플러그인
+        """
+        self.plugins.append(plugin)
+
+    def _execute_plugins(
+        self, provider_id: str, context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        등록된 플러그인 실행
+
+        Args:
+            provider_id: Provider ID
+            context: 실행 컨텍스트
+
+        Returns:
+            수정된 컨텍스트
+        """
+        for plugin in self.plugins:
+            context = plugin.execute(provider_id, context)
+        return context
 
     def create_provider(
         self,
@@ -69,6 +131,13 @@ class ProviderManager:
             model=model,
             created_at=datetime.now(),
             updated_at=datetime.now(),
+        )
+        self._execute_plugins(
+            provider.id or "",
+            {
+                "action": "create",
+                "provider": provider.model_dump(),
+            },
         )
         return self.provider_repository.create(provider)
 
@@ -115,6 +184,14 @@ class ProviderManager:
             수정된 Provider 또는 None
         """
         provider = self.provider_repository.get(provider_id)
+        if provider is not None:
+            self._execute_plugins(
+                provider_id,
+                {
+                    "action": "delete",
+                    "provider": provider.model_dump(),
+                },
+            )
         if provider is None:
             return None
 
@@ -128,6 +205,14 @@ class ProviderManager:
             provider.model = model
 
         provider.updated_at = datetime.now()
+
+        self._execute_plugins(
+            provider_id,
+            {
+                "action": "update",
+                "provider": provider.model_dump(),
+            },
+        )
 
         return self.provider_repository.update(provider)
 
@@ -157,7 +242,25 @@ class ProviderManager:
         if provider is None:
             return {"success": False, "message": "Provider not found"}
 
-        return self._test_connection_with_provider(provider)
+        self._execute_plugins(
+            provider_id,
+            {
+                "action": "test_connection_before",
+                "provider": provider.model_dump(),
+            },
+        )
+
+        result = self._test_connection_with_provider(provider)
+        self._execute_plugins(
+            provider_id,
+            {
+                "action": "test_connection_after",
+                "provider": provider.model_dump(),
+                "result": result,
+            },
+        )
+
+        return result
 
     def test_connection_with_data(
         self, provider_data: dict[str, Any]
@@ -189,7 +292,26 @@ class ProviderManager:
             updated_at=datetime.now(),
         )
 
-        return self._test_connection_with_provider(provider)
+        self._execute_plugins(
+            provider_data.get("id", "") or "",
+            {
+                "action": "test_connection_with_data_before",
+                "provider_data": provider_data,
+            },
+        )
+
+        result = self._test_connection_with_provider(provider)
+
+        self._execute_plugins(
+            provider.id or "",
+            {
+                "action": "test_connection_with_data_after",
+                "provider": provider.model_dump(),
+                "result": result,
+            },
+        )
+
+        return result
 
     def _test_connection_with_provider(self, provider: Provider) -> dict[str, Any]:
         """

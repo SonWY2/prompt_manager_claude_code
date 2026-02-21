@@ -30,21 +30,22 @@ from PySide6.QtWidgets import (
 from src.core.provider_manager import ProviderManager
 from src.gui.theme import (
     COLOR_ACCENT,
-    COLOR_ACCENT_HOVER,
-    COLOR_ACCENT_PRESSED,
-    COLOR_BORDER,
-    COLOR_SIDEBAR,
+    COLOR_DIFF_ADDED_BG,
+    COLOR_DIFF_REMOVED_BG,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
-    COLOR_TEXT_ON_ACCENT,
-    COLOR_INPUT_BG,
-    COLOR_INPUT_BORDER,
-    COLOR_BUTTON_BG,
-    COLOR_BACKGROUND,
-    COLOR_DIFF_REMOVED_BG,
-    COLOR_DIFF_ADDED_BG,
-    COLOR_ERROR,
-    COLOR_ERROR_SOFT,
+)
+from src.gui.widgets.result_viewer_styles import (
+    combo_box_stylesheet,
+    compare_browser_stylesheet,
+    control_bar_stylesheet,
+    error_html,
+    history_list_stylesheet,
+    history_preview_stylesheet,
+    metrics_bar_stylesheet,
+    result_browser_stylesheet,
+    run_button_stylesheet,
+    tab_widget_stylesheet,
 )
 
 
@@ -53,6 +54,8 @@ class ResultViewer(QWidget):
 
     DEFAULT_MODELS = ["OpenAI: GPT-4o", "Ollama: llama2"]
     METRIC_KEYS = ["latency", "input_tokens", "output_tokens", "cost"]
+    MODEL_SELECTOR_MIN_WIDTH = 220
+    COMPARE_SELECTOR_MIN_WIDTH = 160
 
     def __init__(self, provider_manager: Optional[ProviderManager] = None) -> None:
         super().__init__()
@@ -79,25 +82,7 @@ class ResultViewer(QWidget):
         layout.addWidget(self._create_control_bar())
 
         self._tab_widget = QTabWidget()
-        self._tab_widget.setStyleSheet(
-            f"""
-            QTabWidget::pane {{ border: none; background-color: {COLOR_BACKGROUND}; }}
-            QTabBar::tab {{
-                background-color: transparent;
-                color: {COLOR_TEXT_SECONDARY};
-                padding: 10px 16px;
-                margin-right: 4px;
-                font-size: 10pt;
-                font-weight: 500;
-                border-bottom: 2px solid transparent;
-            }}
-            QTabBar::tab:selected {{
-                color: {COLOR_ACCENT};
-                border-bottom: 2px solid {COLOR_ACCENT};
-            }}
-            QTabBar::tab:hover {{ color: {COLOR_TEXT_PRIMARY}; }}
-            """
-        )
+        self._tab_widget.setStyleSheet(tab_widget_stylesheet())
 
         self._tab_widget.addTab(self._create_result_tab(), "Result")
         self._tab_widget.addTab(self._create_history_tab(), "History")
@@ -112,9 +97,7 @@ class ResultViewer(QWidget):
 
     def _create_control_bar(self) -> QWidget:
         widget = QWidget()
-        widget.setStyleSheet(
-            f"background-color: {COLOR_SIDEBAR}; border-bottom: 1px solid {COLOR_BORDER};"
-        )
+        widget.setStyleSheet(control_bar_stylesheet())
 
         layout = QHBoxLayout()
         layout.setContentsMargins(16, 12, 16, 12)
@@ -126,23 +109,7 @@ class ResultViewer(QWidget):
 
         self._model_selector = QComboBox()
         self._model_selector.setStyleSheet(
-            f"""
-            QComboBox {{
-                background-color: {COLOR_INPUT_BG};
-                color: {COLOR_TEXT_PRIMARY};
-                border: 1px solid {COLOR_INPUT_BORDER};
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 10pt;
-                min-width: 200px;
-            }}
-            QComboBox::drop-down {{ border: none; }}
-            QComboBox QAbstractItemView {{
-                background-color: {COLOR_SIDEBAR};
-                selection-background-color: {COLOR_ACCENT};
-                color: {COLOR_TEXT_PRIMARY};
-            }}
-            """
+            combo_box_stylesheet(self.MODEL_SELECTOR_MIN_WIDTH)
         )
         layout.addWidget(self._model_selector)
 
@@ -150,22 +117,7 @@ class ResultViewer(QWidget):
 
         self._run_button = QPushButton("RUN")
         self._run_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._run_button.setStyleSheet(
-            f"""
-            QPushButton {{
-                background-color: {COLOR_ACCENT};
-                color: {COLOR_TEXT_ON_ACCENT};
-                border: none;
-                border-radius: 8px;
-                padding: 10px 32px;
-                font-size: 11pt;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{ background-color: {COLOR_ACCENT_HOVER}; }}
-            QPushButton:pressed {{ background-color: {COLOR_ACCENT_PRESSED}; }}
-            QPushButton:disabled {{ background-color: {COLOR_BUTTON_BG}; color: {COLOR_TEXT_SECONDARY}; }}
-            """
-        )
+        self._run_button.setStyleSheet(run_button_stylesheet())
         layout.addWidget(self._run_button)
 
         widget.setLayout(layout)
@@ -178,18 +130,7 @@ class ResultViewer(QWidget):
         layout.setSpacing(0)
 
         self._result_browser = QTextBrowser()
-        self._result_browser.setStyleSheet(
-            f"""
-            QTextBrowser {{
-                background-color: transparent;
-                color: {COLOR_TEXT_PRIMARY};
-                border: none;
-                padding: 20px;
-                font-size: 11pt;
-                line-height: 1.6;
-            }}
-            """
-        )
+        self._result_browser.setStyleSheet(result_browser_stylesheet())
         layout.addWidget(self._result_browser)
 
         widget.setLayout(layout)
@@ -203,18 +144,11 @@ class ResultViewer(QWidget):
 
         self._history_list = QListWidget()
         self._history_list.currentRowChanged.connect(self._on_history_row_changed)
-        self._history_list.setStyleSheet(
-            f"""
-            QListWidget {{ background-color: {COLOR_SIDEBAR}; color: {COLOR_TEXT_PRIMARY}; border: 1px solid {COLOR_BORDER}; }}
-            QListWidget::item:selected {{ background-color: {COLOR_BORDER}; color: {COLOR_TEXT_PRIMARY}; }}
-            """
-        )
+        self._history_list.setStyleSheet(history_list_stylesheet())
         layout.addWidget(self._history_list)
 
         self._history_preview = QTextBrowser()
-        self._history_preview.setStyleSheet(
-            f"background-color: {COLOR_SIDEBAR}; color: {COLOR_TEXT_PRIMARY};"
-        )
+        self._history_preview.setStyleSheet(history_preview_stylesheet())
         layout.addWidget(self._history_preview)
 
         widget.setLayout(layout)
@@ -229,6 +163,9 @@ class ResultViewer(QWidget):
         selectors = QHBoxLayout()
         self._compare_left_selector = QComboBox()
         self._compare_right_selector = QComboBox()
+        compare_selector_style = combo_box_stylesheet(self.COMPARE_SELECTOR_MIN_WIDTH)
+        self._compare_left_selector.setStyleSheet(compare_selector_style)
+        self._compare_right_selector.setStyleSheet(compare_selector_style)
         self._compare_left_selector.currentIndexChanged.connect(
             self._update_compare_view
         )
@@ -240,9 +177,7 @@ class ResultViewer(QWidget):
         layout.addLayout(selectors)
 
         self._compare_browser = QTextBrowser()
-        self._compare_browser.setStyleSheet(
-            f"background-color: {COLOR_SIDEBAR}; color: {COLOR_TEXT_PRIMARY};"
-        )
+        self._compare_browser.setStyleSheet(compare_browser_stylesheet())
         layout.addWidget(self._compare_browser)
 
         widget.setLayout(layout)
@@ -266,9 +201,7 @@ class ResultViewer(QWidget):
 
     def _create_metrics_bar(self) -> QWidget:
         widget = QWidget()
-        widget.setStyleSheet(
-            f"QWidget {{ background-color: {COLOR_BORDER}; border-top: 1px solid {COLOR_BORDER}; }}"
-        )
+        widget.setStyleSheet(metrics_bar_stylesheet())
 
         layout = QHBoxLayout()
         layout.setContentsMargins(16, 8, 16, 8)
@@ -503,17 +436,7 @@ class ResultViewer(QWidget):
         self._refresh_metrics_summary()
 
     def display_error(self, error: str) -> None:
-        self._result_browser.setHtml(
-            """
-            <div style="color: {error_color}; padding: 16px; border-left: 4px solid {error_color}; background-color: {error_background};">
-                <strong>Error:</strong> {error}
-            </div>
-            """.format(
-                error=escape(error),
-                error_color=COLOR_ERROR,
-                error_background=COLOR_ERROR_SOFT,
-            )
-        )
+        self._result_browser.setHtml(error_html(error))
 
     def _load_models(self) -> None:
         self._model_selector.clear()

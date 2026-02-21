@@ -33,7 +33,7 @@ class TestMainWindowIntegration:
 
     def test_main_window_initialization(self, main_window):
         """MainWindow 초기화 테스트"""
-        assert main_window.windowTitle() == "Prompt Manager"
+        assert main_window.windowTitle() == "Prompt Manager[*]"
         assert main_window.minimumWidth() == 1200
         assert main_window.minimumHeight() == 800
 
@@ -362,7 +362,7 @@ class TestMainWindowIntegration:
             model="mock-model",
         )
 
-        monkeypatch.setattr("src.gui.main_window.LLMService", FakeLLMService)
+        monkeypatch.setattr("src.gui.prompt_runner.LLMService", FakeLLMService)
         monkeypatch.setattr(
             main_window._provider_manager, "get_provider", lambda _: provider
         )

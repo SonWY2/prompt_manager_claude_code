@@ -99,6 +99,8 @@ def sample_prompt(temp_db_path: Path) -> Prompt:
         id="prompt_001",
         task_id="task_001",
         current_version_id=None,
+        system_prompt="",
+        user_prompt="",
     )
     return prompt_repo.create(prompt)
 
@@ -160,6 +162,44 @@ class TestVersionManagerCreateVersion:
         assert version.version_number == 2
         assert version.content == content
 
+    def test_create_version_with_custom_name(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        """
+        커스텀 버전 이름 생성 테스트
+
+        Args:
+            version_manager: VersionManager 인스턴스
+            sample_prompt: 샘플 프롬프트
+        """
+        version = version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용",
+            version_name="Release Candidate",
+        )
+
+        assert version.version_name == "Release Candidate"
+        assert version.version_number == 1
+
+    def test_create_version_with_empty_name_becomes_none(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        """
+        빈 커스텀 이름은 None으로 정규화되는지 테스트
+
+        Args:
+            version_manager: VersionManager 인스턴스
+            sample_prompt: 샘플 프롬프트
+        """
+        version = version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용",
+            version_name="   ",
+        )
+
+        assert version.version_name is None
+        assert version.version_number == 1
+
     def test_create_version_with_plugin_hook(
         self, version_manager: VersionManager, sample_prompt: Prompt
     ):
@@ -182,6 +222,81 @@ class TestVersionManagerCreateVersion:
         assert "action" in mock_plugin.last_context
         assert mock_plugin.last_context["action"] == "create_version"
         assert "version" in mock_plugin.last_context
+
+    def test_update_version_name(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        """
+        버전 이름 변경 테스트
+
+        Args:
+            version_manager: VersionManager 인스턴스
+            sample_prompt: 샘플 프롬프트
+        """
+        created = version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용",
+            version_name="Initial",
+        )
+
+        updated = version_manager.update_version_name(
+            version_id=created.id,
+            version_name="Renamed",
+        )
+
+        assert updated is not None
+        assert updated.version_name == "Renamed"
+        assert updated.version_number == created.version_number
+
+    def test_update_version_name_with_blank_raises_error(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        created = version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용",
+            version_name="Initial",
+        )
+
+        with pytest.raises(ValueError, match="Version name is required"):
+            version_manager.update_version_name(
+                version_id=created.id, version_name="   "
+            )
+
+    def test_update_version_name_with_duplicate_raises_error(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용 1",
+            version_name="Alpha",
+        )
+        created = version_manager.create_version(
+            prompt_id=sample_prompt.id,
+            content="프롬프트 내용 2",
+            version_name="Beta",
+        )
+
+        with pytest.raises(ValueError, match="Version name already exists"):
+            version_manager.update_version_name(
+                version_id=created.id,
+                version_name="Alpha",
+            )
+
+    def test_update_version_name_nonexistent_version(
+        self, version_manager: VersionManager, sample_prompt: Prompt
+    ):
+        """
+        존재하지 않는 버전 이름 변경 시 None 반환 테스트
+
+        Args:
+            version_manager: VersionManager 인스턴스
+            sample_prompt: 샘플 프롬프트
+        """
+        updated = version_manager.update_version_name(
+            version_id="missing-id", version_name="Renamed"
+        )
+
+        assert updated is None
 
     def test_auto_create_first_version(
         self, version_manager: VersionManager, sample_prompt: Prompt
@@ -324,6 +439,7 @@ class TestVersionManagerRestoreVersion:
         v1 = version_manager.create_version(
             prompt_id=sample_prompt.id,
             content=original_content,
+            version_name="Original",
         )
 
         # 버전 2 생성
@@ -341,6 +457,7 @@ class TestVersionManagerRestoreVersion:
 
         # 복구된 버전은 새로운 버전 번호를 가져야 함
         assert restored_version.version_number == 3
+        assert restored_version.version_name == "Original"
         assert restored_version.content == original_content
 
     def test_restore_version_with_plugin_hook(

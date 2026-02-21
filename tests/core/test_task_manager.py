@@ -127,9 +127,7 @@ class TestTaskManager:
         task = task_manager.create_task("원본 태스크", "원본 설명")
 
         updated_task = task_manager.update_task(
-            task.id,
-            name="수정된 태스크",
-            description="수정된 설명"
+            task.id, name="수정된 태스크", description="수정된 설명"
         )
 
         assert updated_task is not None
@@ -140,9 +138,7 @@ class TestTaskManager:
     def test_update_task_not_found(self, task_manager: TaskManager):
         """존재하지 않는 태스크 수정 테스트"""
         result = task_manager.update_task(
-            "non_existent_id",
-            name="이름",
-            description="설명"
+            "non_existent_id", name="이름", description="설명"
         )
         assert result is None
 
@@ -196,12 +192,16 @@ class TestTaskManager:
         prompt1 = Prompt(
             id="prompt_1",
             task_id=task.id,
-            current_version_id=None
+            current_version_id=None,
+            system_prompt="",
+            user_prompt="",
         )
         prompt2 = Prompt(
             id="prompt_2",
             task_id=task.id,
-            current_version_id=None
+            current_version_id=None,
+            system_prompt="",
+            user_prompt="",
         )
         prompt_repo.create(prompt1)
         prompt_repo.create(prompt2)
@@ -211,7 +211,9 @@ class TestTaskManager:
         other_prompt = Prompt(
             id="prompt_3",
             task_id=other_task.id,
-            current_version_id=None
+            current_version_id=None,
+            system_prompt="",
+            user_prompt="",
         )
         prompt_repo.create(other_prompt)
 
@@ -227,3 +229,42 @@ class TestTaskManager:
         prompts = task_manager.get_task_prompts(task.id)
 
         assert len(prompts) == 0
+
+    def test_save_task_prompt_creates_and_updates_prompt(
+        self, task_manager: TaskManager
+    ):
+        task = task_manager.create_task("저장 태스크", "설명")
+
+        saved1 = task_manager.save_task_prompt(
+            task_id=task.id,
+            system_prompt="system v1",
+            user_prompt="user v1",
+        )
+        assert saved1 is not None
+        assert saved1.id.startswith("prompt_")
+        assert saved1.system_prompt == "system v1"
+        assert saved1.user_prompt == "user v1"
+
+        saved2 = task_manager.save_task_prompt(
+            task_id=task.id,
+            system_prompt="system v2",
+            user_prompt="user v2",
+        )
+        assert saved2 is not None
+        assert saved2.id == saved1.id
+        assert saved2.system_prompt == "system v2"
+        assert saved2.user_prompt == "user v2"
+
+        latest = task_manager.get_latest_task_prompt(task.id)
+        assert latest is not None
+        assert latest.id == saved1.id
+        assert latest.system_prompt == "system v2"
+        assert latest.user_prompt == "user v2"
+
+    def test_save_task_prompt_task_not_found(self, task_manager: TaskManager):
+        saved = task_manager.save_task_prompt(
+            task_id="non_existent_task_id",
+            system_prompt="system",
+            user_prompt="user",
+        )
+        assert saved is None
