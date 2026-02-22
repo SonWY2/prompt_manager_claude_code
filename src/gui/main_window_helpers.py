@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QComboBox, QDialog, QInputDialog, QMainWindow
 
 from src.core.task_manager import TaskManager
 from src.core.version_manager import VersionManager
+from src.gui.widgets.modal_dialog_factory import center_dialog_on_parent_or_screen
 
 
 def get_version_display_text(
@@ -26,13 +27,7 @@ def get_version_display_text(
 
 
 def position_dialog_at_parent_center(parent: QMainWindow, dialog: QDialog) -> None:
-    dialog.adjustSize()
-
-    if parent.isVisible():
-        parent_center = parent.mapToGlobal(parent.rect().center())
-        dialog_x = int(parent_center.x() - (dialog.width() / 2))
-        dialog_y = int(parent_center.y() - (dialog.height() / 2))
-        dialog.move(dialog_x, dialog_y)
+    center_dialog_on_parent_or_screen(dialog, parent)
 
 
 def ask_text_input(

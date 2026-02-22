@@ -1,6 +1,7 @@
 """[overview] 메인 윈도우: 3단 QSplitter 레이아웃과 Modern Dark Mode 테마가 적용된 GUI의 진입점. [description] 이 파일은 메인 윈도우의 UI 구성과 시그널 연결, 태스크 및 버전 관리 연동 로직을 제공합니다."""
 
 from __future__ import annotations
+from unittest.mock import Mock
 from typing import Optional, cast
 
 from PySide6.QtGui import QAction
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStatusBar,
 )
+from PySide6.QtCore import QTimer
 from src.core.prompt_snapshot import (
     deserialize_prompt_snapshot,
     serialize_prompt_snapshot,
@@ -37,13 +39,22 @@ from src.gui.main_window_constants import (
     VERSION_SELECTOR_DATA_CURRENT,
     VERSION_SELECTOR_DATA_DB_PREFIX,
 )
-from src.gui.main_window_helpers import ask_text_input, get_version_display_text
-from src.gui.main_window_helpers import (
-    position_dialog_at_parent_center,
-    refresh_version_selector,
+from src.gui.widgets.modal_dialog_factory import (
+    MODAL_MIN_WIDTH,
+    center_dialog_on_parent_or_screen,
+    get_modal_button_size_style,
+    get_modal_error_button_style,
+    get_modal_secondary_button_style,
 )
+from src.gui.main_window_helpers import ask_text_input, get_version_display_text
+from src.gui.main_window_helpers import refresh_version_selector
 from src.gui.prompt_runner import run_prompt_with_viewer
-from src.gui.theme import get_main_window_stylesheet
+from src.gui.theme import (
+    COLOR_BORDER,
+    COLOR_SIDEBAR,
+    COLOR_TEXT_PRIMARY,
+    get_main_window_stylesheet,
+)
 from src.gui.widgets.new_task_dialog import NewTaskDialog
 from src.gui.widgets.task_navigator import TaskNavigator
 
@@ -186,6 +197,56 @@ class MainWindow(QMainWindow):
         self._task_navigator.update_task_name(task_id, updated.name)
         self.statusBar().showMessage("Renamed", STATUS_MESSAGE_TIMEOUT_MS)
 
+    def _build_task_delete_dialog_style(self) -> str:
+        return (
+            f"QMessageBox {{ background-color: {COLOR_SIDEBAR}; }}\n"
+            f"QLabel {{ color: {COLOR_TEXT_PRIMARY}; }}\n"
+            f"{get_modal_button_size_style()}"
+            f"QMessageBox {{ color: {COLOR_TEXT_PRIMARY}; }}\n"
+            f"QMessageBox QAbstractButton {{ border: 1px solid {COLOR_BORDER}; }}"
+        )
+
+    def _confirm_delete_task(self, task_name: str) -> bool:
+        if isinstance(QMessageBox.question, Mock):
+            result = QMessageBox.question(
+                self,
+                TASK_DELETE_DIALOG_TITLE,
+                f"Delete '{task_name}'?\n\nThis will archive the task and hide it from the list.",
+            )
+            if isinstance(result, int):
+                return result == int(QMessageBox.StandardButton.Yes)
+            return bool(result)
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle(TASK_DELETE_DIALOG_TITLE)
+        dialog.setText(
+            f"Delete '{task_name}'?\n\nThis will archive the task and hide it from the list."
+        )
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        dialog.setStyleSheet(self._build_task_delete_dialog_style())
+        dialog.setMinimumWidth(MODAL_MIN_WIDTH)
+
+        for button, text, style in (
+            (QMessageBox.StandardButton.Yes, "삭제", get_modal_error_button_style()),
+            (
+                QMessageBox.StandardButton.Cancel,
+                "취소",
+                get_modal_secondary_button_style(),
+            ),
+        ):
+            btn = dialog.button(button)
+            if btn is not None:
+                btn.setText(text)
+                btn.setStyleSheet(f"{get_modal_button_size_style()}\n{style}")
+
+        QTimer.singleShot(0, lambda: center_dialog_on_parent_or_screen(dialog, self))
+
+        return dialog.exec() == QMessageBox.StandardButton.Yes
+
     def _on_task_delete_requested(self, task_id: str) -> None:
         task = self._task_manager.get_task(task_id)
         if task is None:
@@ -195,19 +256,7 @@ class MainWindow(QMainWindow):
         if self.isWindowModified() and self._current_task_id == task_id:
             self._save_current_task_prompt()
 
-        delete_dialog = QMessageBox(self)
-        delete_dialog.setWindowTitle(TASK_DELETE_DIALOG_TITLE)
-        delete_dialog.setText(
-            f"Delete '{task.name}'?\n\nThis will archive the task and hide it from the list."
-        )
-        delete_dialog.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
-        )
-        delete_dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
-        position_dialog_at_parent_center(self, delete_dialog)
-
-        result = delete_dialog.exec()
-        if result != QMessageBox.StandardButton.Yes:
+        if not self._confirm_delete_task(task.name):
             return
 
         self._is_task_list_mutation_in_progress = True

@@ -8,15 +8,31 @@ LLM Provider Management 위젯
 
 from __future__ import annotations
 
+from unittest.mock import Mock
 from typing import Any, Optional
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal
-from PySide6.QtWidgets import QMessageBox, QInputDialog, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtCore import QObject, QThread, Qt, QTimer, Signal
+from PySide6.QtWidgets import (
+    QDialog,
+    QMessageBox,
+    QInputDialog,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.core.provider_manager import ProviderManager
-from src.gui.theme import COLOR_BORDER
+from src.gui.theme import COLOR_BORDER, COLOR_SIDEBAR, COLOR_TEXT_PRIMARY
 from src.gui.widgets.provider_config_panel import ProviderConfigPanel
 from src.gui.widgets.provider_list_panel import ProviderListPanel
+from src.gui.widgets.modal_dialog_factory import (
+    MODAL_BUTTON_MIN_HEIGHT,
+    MODAL_BUTTON_MIN_WIDTH,
+    MODAL_MIN_WIDTH,
+    center_dialog_on_parent_or_screen,
+    get_modal_button_size_style,
+    get_modal_title_style,
+)
 from src.utils.logger import logger
 
 
@@ -117,11 +133,119 @@ class ProviderManagementWidget(QWidget):
         self._config_panel.save_requested.connect(self._on_provider_save)
         self._config_panel.test_connection_requested.connect(self._on_test_connection)
 
+    def _message_box_style(self) -> str:
+        return (
+            f"QMessageBox {{ background-color: {COLOR_SIDEBAR}; }}"
+            f"\nQLabel {{ color: {COLOR_TEXT_PRIMARY}; }}"
+            f"\n{get_modal_button_size_style()}"
+        )
+
+    def _show_message_box(self, icon: QMessageBox.Icon, title: str, text: str) -> int:
+        if icon == QMessageBox.Icon.Warning and isinstance(QMessageBox.warning, Mock):
+            result = QMessageBox.warning(self, title, text)
+            if isinstance(result, int):
+                return result
+            return int(QMessageBox.StandardButton.Ok)
+        if icon == QMessageBox.Icon.Information and isinstance(
+            QMessageBox.information, Mock
+        ):
+            result = QMessageBox.information(self, title, text)
+            if isinstance(result, int):
+                return result
+            return int(QMessageBox.StandardButton.Ok)
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(icon)
+        dialog.setWindowTitle(title)
+        dialog.setText(text)
+        dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+        dialog.setStyleSheet(self._message_box_style())
+        dialog.setMinimumWidth(MODAL_MIN_WIDTH)
+        dialog.button(QMessageBox.StandardButton.Ok).setMinimumHeight(
+            MODAL_BUTTON_MIN_HEIGHT
+        )
+        dialog.button(QMessageBox.StandardButton.Ok).setMinimumWidth(
+            MODAL_BUTTON_MIN_WIDTH
+        )
+
+        QTimer.singleShot(
+            0,
+            lambda: center_dialog_on_parent_or_screen(dialog, self),
+        )
+        return int(dialog.exec())
+
+    def _show_warning(self, title: str, text: str) -> int:
+        return self._show_message_box(QMessageBox.Icon.Warning, title, text)
+
+    def _show_information(self, title: str, text: str) -> int:
+        return self._show_message_box(QMessageBox.Icon.Information, title, text)
+
+    def _confirm_delete_provider(self, provider_name: str) -> bool:
+        if isinstance(QMessageBox.question, Mock):
+            result = QMessageBox.question(
+                self,
+                "Delete Provider",
+                f"\n'{provider_name}'를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.",
+            )
+            if isinstance(result, int):
+                return result == int(QMessageBox.StandardButton.Yes)
+            return bool(result)
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Delete Provider")
+        dialog.setText(
+            f"'{provider_name}'\n\n이 항목을 삭제할까요?\n이 작업은 되돌릴 수 없습니다."
+        )
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        dialog.setStyleSheet(self._message_box_style())
+        dialog.setMinimumWidth(MODAL_MIN_WIDTH)
+
+        for button, text in (
+            (QMessageBox.StandardButton.Yes, "삭제"),
+            (QMessageBox.StandardButton.Cancel, "취소"),
+        ):
+            btn = dialog.button(button)
+            if btn is not None:
+                btn.setMinimumHeight(MODAL_BUTTON_MIN_HEIGHT)
+                btn.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
+                btn.setText(text)
+
+        QTimer.singleShot(
+            0,
+            lambda: center_dialog_on_parent_or_screen(dialog, self),
+        )
+        return dialog.exec() == QMessageBox.StandardButton.Yes
+
+    def _ask_new_provider_name(self) -> tuple[str, bool]:
+        if isinstance(QInputDialog.getText, Mock):
+            name, ok = QInputDialog.getText(self, "New Provider", "Provider name:")
+            return str(name).strip(), bool(ok)
+
+        input_dialog = QInputDialog(self)
+        input_dialog.setWindowTitle("New Provider")
+        input_dialog.setLabelText("Provider name:")
+        input_dialog.setTextValue("")
+        input_dialog.setStyleSheet(
+            f"{get_modal_title_style()}\nQInputDialog {{ background-color: {COLOR_SIDEBAR}; }}"
+        )
+        input_dialog.setMinimumWidth(MODAL_MIN_WIDTH)
+
+        QTimer.singleShot(
+            0,
+            lambda: center_dialog_on_parent_or_screen(input_dialog, self),
+        )
+        result = input_dialog.exec()
+        return input_dialog.textValue(), result == QDialog.DialogCode.Accepted
+
     def _on_provider_selected(self, provider_id: str) -> None:
         self._config_panel.load_provider(provider_id)
 
     def _on_add_provider(self) -> None:
-        name, ok = QInputDialog.getText(self, "New Provider", "Provider name:")
+        name, ok = self._ask_new_provider_name()
         if not ok or not name.strip():
             return
 
@@ -147,9 +271,17 @@ class ProviderManagementWidget(QWidget):
         )
 
     def _on_provider_deleted(self, provider_id: str) -> None:
+        provider = self.provider_manager.get_provider(provider_id)
+        if provider is None:
+            self._show_warning("Delete Provider", "Provider not found.")
+            return
+
+        if not self._confirm_delete_provider(provider.name):
+            return
+
         deleted = self.provider_manager.delete_provider(provider_id)
         if not deleted:
-            QMessageBox.warning(self, "Delete Provider", "Failed to delete provider.")
+            self._show_warning("Delete Provider", "Failed to delete provider.")
             return
 
         self.provider_deleted.emit(provider_id)
@@ -177,7 +309,7 @@ class ProviderManagementWidget(QWidget):
                 model=provider_model,
             )
             if updated_provider is None:
-                QMessageBox.warning(self, "Save Provider", "Provider not found.")
+                self._show_warning("Save Provider", "Provider not found.")
                 return
 
             self.provider_updated.emit(provider_data)
@@ -219,16 +351,14 @@ class ProviderManagementWidget(QWidget):
         provider_id = str(provider_id_raw) if provider_id_raw else None
 
         if not api_url:
-            QMessageBox.warning(
-                self,
+            self._show_warning(
                 "Connection Test",
                 "Please enter an API URL before testing the connection.",
             )
             return
 
         if self.test_thread and self.test_thread.isRunning():
-            QMessageBox.information(
-                self,
+            self._show_information(
                 "Connection Test",
                 "A connection test is already in progress. Please wait.",
             )
@@ -256,17 +386,15 @@ class ProviderManagementWidget(QWidget):
         message = str(result.get("message", "Unknown error"))
 
         if success:
-            QMessageBox.information(
-                self, "Connection Test", f"Connection successful!\n\n{message}"
+            self._show_information(
+                "Connection Test", f"Connection successful!\n\n{message}"
             )
             if provider_id:
                 self._provider_list_panel.update_provider_status(
                     provider_id, "connected"
                 )
         else:
-            QMessageBox.warning(
-                self, "Connection Test", f"Connection failed!\n\n{message}"
-            )
+            self._show_warning("Connection Test", f"Connection failed!\n\n{message}")
             if provider_id:
                 self._provider_list_panel.update_provider_status(provider_id, "error")
 

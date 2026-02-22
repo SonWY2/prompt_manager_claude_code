@@ -10,15 +10,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDialog,
     QMainWindow,
     QSplitter,
     QToolBar,
+    QHBoxLayout,
     QVBoxLayout,
     QWidget,
+    QLabel,
+    QPushButton,
 )
 
 from src.core.provider_manager import ProviderManager
@@ -26,6 +29,17 @@ from src.gui.widgets.prompt_editor import PromptEditor
 from src.gui.widgets.provider_management_widget import ProviderManagementWidget
 from src.gui.widgets.result_viewer import ResultViewer
 from src.gui.widgets.task_navigator import TaskNavigator
+from src.gui.widgets.modal_dialog_factory import (
+    MODAL_BUTTON_MIN_HEIGHT,
+    MODAL_BUTTON_MIN_WIDTH,
+    MODAL_BUTTON_SPACING,
+    get_modal_button_size_style,
+    get_modal_primary_button_style,
+    get_modal_subtitle_style,
+    get_modal_title_style,
+    setup_modal_dialog,
+    center_dialog_on_parent_or_screen,
+)
 
 
 SPLITTER_SIZE_NAVIGATOR: int = 250
@@ -225,14 +239,46 @@ def open_provider_settings_dialog(
 ) -> None:
     dialog = QDialog(parent)
     dialog.setWindowTitle("LLM Provider Settings")
-    dialog.setMinimumSize(1100, 700)
+    card_layout = setup_modal_dialog(
+        dialog, object_name="providerSettingsDialogCard", min_width=1100
+    )
+
+    title_label = QLabel("LLM Provider Settings")
+    title_label.setStyleSheet(get_modal_title_style())
+    card_layout.addWidget(title_label)
+
+    subtitle_label = QLabel(
+        "Manage your LLM providers and validate connection settings."
+    )
+    subtitle_label.setWordWrap(True)
+    subtitle_label.setStyleSheet(get_modal_subtitle_style())
+    card_layout.addWidget(subtitle_label)
 
     layout = QVBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(MODAL_BUTTON_SPACING)
     provider_management = ProviderManagementWidget(provider_manager)
     layout.addWidget(provider_management)
-    dialog.setLayout(layout)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    button_layout = QHBoxLayout()
+    button_layout.addStretch()
+    close_button = QPushButton("Done")
+    close_button.setMinimumHeight(MODAL_BUTTON_MIN_HEIGHT)
+    close_button.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
+    close_button.setStyleSheet(
+        f"{get_modal_primary_button_style()}\n{get_modal_button_size_style()}"
+    )
+    close_button.clicked.connect(dialog.accept)
+    button_layout.addWidget(close_button)
+
+    button_bar = QWidget()
+    button_bar.setLayout(button_layout)
+    layout.addWidget(button_bar)
+    card_layout.addLayout(layout)
 
     provider_management.load_providers()
+    QTimer.singleShot(0, lambda: center_dialog_on_parent_or_screen(dialog, parent))
 
     result = dialog.exec()
     if result == QDialog.DialogCode.Accepted:

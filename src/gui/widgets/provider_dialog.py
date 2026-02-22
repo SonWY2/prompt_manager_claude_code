@@ -9,13 +9,41 @@ Provider Dialog 구현
 from typing import Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QShowEvent
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit,
-    QComboBox, QSlider, QDoubleSpinBox, QSpinBox, QDialogButtonBox,
-    QPushButton, QHBoxLayout
+    QDialog,
+    QVBoxLayout,
+    QFormLayout,
+    QLineEdit,
+    QPlainTextEdit,
+    QComboBox,
+    QSlider,
+    QDoubleSpinBox,
+    QSpinBox,
+    QDialogButtonBox,
+    QPushButton,
+    QHBoxLayout,
 )
+from PySide6.QtWidgets import QLabel
 
 from src.data.models import Provider
+from src.gui.widgets.modal_dialog_factory import (
+    center_dialog_on_parent_or_screen,
+    get_modal_button_size_style,
+    get_modal_text_area_style,
+    get_modal_line_edit_style,
+    get_modal_primary_button_style,
+    get_modal_secondary_button_style,
+    get_modal_subtitle_style,
+    get_modal_title_style,
+    MODAL_BUTTON_MIN_HEIGHT,
+    MODAL_BUTTON_MIN_WIDTH,
+    MODAL_BUTTON_SPACING,
+    MODAL_INPUT_MIN_HEIGHT,
+    MODAL_MIN_WIDTH,
+    setup_modal_dialog,
+)
 
 
 DEFAULT_MODELS = [
@@ -67,31 +95,59 @@ class ProviderDialog(QDialog):
         else:
             self.setWindowTitle("Edit Provider")
 
-        layout = QVBoxLayout(self)
+        card_layout = setup_modal_dialog(
+            self,
+            object_name="providerDialogCard",
+            min_width=MODAL_MIN_WIDTH,
+        )
+
+        title_label = QLabel(self.windowTitle())
+        title_label.setStyleSheet(get_modal_title_style())
+        card_layout.addWidget(title_label)
+
+        subtitle_label = QLabel("Configure provider connection and defaults.")
+        subtitle_label.setWordWrap(True)
+        subtitle_label.setStyleSheet(get_modal_subtitle_style())
+        card_layout.addWidget(subtitle_label)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(MODAL_BUTTON_SPACING)
 
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Provider Name")
+        self.name_edit.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
+        self.name_edit.setStyleSheet(get_modal_line_edit_style())
         form_layout.addRow("Name:", self.name_edit)
 
         self.description_edit = QPlainTextEdit()
         self.description_edit.setMaximumHeight(80)
         self.description_edit.setPlaceholderText("Description (optional)")
+        self.description_edit.setStyleSheet(get_modal_text_area_style())
         form_layout.addRow("Description:", self.description_edit)
 
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("https://api.openai.com/v1")
+        self.api_url_edit.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
+        self.api_url_edit.setStyleSheet(get_modal_line_edit_style())
         form_layout.addRow("API Base URL:", self.api_url_edit)
 
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_edit.setPlaceholderText("API Key (optional)")
+        self.api_key_edit.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
+        self.api_key_edit.setStyleSheet(get_modal_line_edit_style())
 
         self.show_api_key_button = QPushButton("Show")
         self.show_api_key_button.setCheckable(True)
-        self.show_api_key_button.setMaximumWidth(60)
+        self.show_api_key_button.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
+        self.show_api_key_button.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
+        self.show_api_key_button.setStyleSheet(
+            f"{get_modal_secondary_button_style()}\n{get_modal_button_size_style()}"
+        )
 
         api_key_layout = QHBoxLayout()
         api_key_layout.addWidget(self.api_key_edit)
@@ -100,12 +156,15 @@ class ProviderDialog(QDialog):
 
         self.model_combo = QComboBox()
         self.model_combo.addItems(DEFAULT_MODELS)
+        self.model_combo.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
+        self.model_combo.setStyleSheet(get_modal_line_edit_style())
         form_layout.addRow("Default Model:", self.model_combo)
 
         temp_layout = QHBoxLayout()
-        self.temperature_slider = QSlider(Qt.Horizontal)
+        self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
         self.temperature_slider.setRange(0, 20)
         self.temperature_slider.setValue(7)
+        self.temperature_slider.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
 
         self.temperature_spinbox = QDoubleSpinBox()
         self.temperature_spinbox.setRange(0.0, 2.0)
@@ -119,6 +178,7 @@ class ProviderDialog(QDialog):
         self.max_tokens_spinbox = QSpinBox()
         self.max_tokens_spinbox.setRange(1, 128000)
         self.max_tokens_spinbox.setValue(4096)
+        self.max_tokens_spinbox.setMinimumHeight(MODAL_INPUT_MIN_HEIGHT)
         form_layout.addRow("Max Tokens:", self.max_tokens_spinbox)
 
         layout.addLayout(form_layout)
@@ -126,16 +186,50 @@ class ProviderDialog(QDialog):
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self.button_box.setCenterButtons(True)
+
+        ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        ok_button.setMinimumHeight(MODAL_BUTTON_MIN_HEIGHT)
+        ok_button.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
+        ok_button.setStyleSheet(
+            f"{get_modal_primary_button_style()}\n{get_modal_button_size_style()}"
+        )
+
+        cancel_button = self.button_box.button(QDialogButtonBox.StandardButton.Cancel)
+        cancel_button.setMinimumHeight(MODAL_BUTTON_MIN_HEIGHT)
+        cancel_button.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
+        cancel_button.setStyleSheet(
+            f"{get_modal_secondary_button_style()}\n{get_modal_button_size_style()}"
+        )
+
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(MODAL_BUTTON_SPACING)
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(ok_button)
+
+        layout.addLayout(button_layout)
+        card_layout.addLayout(layout)
+
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
 
-        layout.addWidget(self.button_box)
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self.center_on_parent_or_screen)
+
+    def center_on_parent_or_screen(self) -> None:
+        center_dialog_on_parent_or_screen(self)
 
     def _connect_signals(self):
         """시그널 연결"""
         self.name_edit.textChanged.connect(self._validate_inputs)
         self.api_url_edit.textChanged.connect(self._validate_inputs)
-        self.temperature_slider.valueChanged.connect(self._on_temperature_slider_changed)
-        self.temperature_spinbox.valueChanged.connect(self._on_temperature_spinbox_changed)
+        self.temperature_slider.valueChanged.connect(
+            self._on_temperature_slider_changed
+        )
+        self.temperature_spinbox.valueChanged.connect(
+            self._on_temperature_spinbox_changed
+        )
         self.show_api_key_button.toggled.connect(self._toggle_api_key_visibility)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
