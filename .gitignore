@@ -42,7 +42,7 @@ Thumbs.db
 htmlcov/
 
 # Data (database files)
-data/
+./data/
 *.json
 opencode.json.bak
 !package.json
