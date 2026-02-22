@@ -13,8 +13,8 @@
 import re
 from typing import List, Dict, Optional, cast, Any
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QTextDocument
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
+from PySide6.QtGui import QKeyEvent, QTextDocument
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -28,25 +28,56 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
+    QDialog,
+    QMessageBox,
+    QLineEdit,
 )
 
 from src.gui.theme import (
     COLOR_SIDEBAR,
     COLOR_ACCENT,
+    COLOR_INPUT_BG,
+    COLOR_INPUT_BORDER,
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_SECONDARY,
     COLOR_BORDER,
-    COLOR_INPUT_BG,
-    COLOR_INPUT_BORDER,
     COLOR_BUTTON_BG,
     COLOR_BUTTON_HOVER,
     COLOR_BACKGROUND,
+)
+from src.gui.widgets.modal_dialog_factory import (
+    MODAL_BUTTON_MIN_HEIGHT,
+    MODAL_BUTTON_MIN_WIDTH,
+    MODAL_BUTTON_SPACING,
+    MODAL_INPUT_MIN_HEIGHT,
+    MODAL_MIN_WIDTH,
+    center_dialog_on_parent_or_screen,
+    get_modal_button_size_style,
+    get_modal_error_button_style,
+    get_modal_line_edit_style,
+    get_modal_primary_button_style,
+    get_modal_secondary_button_style,
+    get_modal_subtitle_style,
+    get_modal_text_area_style,
+    get_modal_title_style,
+    setup_modal_dialog,
 )
 from src.gui.widgets.prompt_highlighter import VariableSyntaxHighlighter
 
 
 class PromptEditor(QWidget):
     """프롬프트 에디터 위젯"""
+
+    _COL_VARIABLE = 0
+    _COL_VALUE = 1
+    _COL_SOURCE = 2
+    _VARIABLE_NAME_PATTERN = r"[a-zA-Z0-9_-]+"
+    _VALUE_PREVIEW_MAX_LENGTH = 80
+    POPUP_MIN_WIDTH: int = MODAL_MIN_WIDTH
+    POPUP_INPUT_MIN_HEIGHT: int = MODAL_INPUT_MIN_HEIGHT
+    POPUP_BUTTON_MIN_HEIGHT: int = MODAL_BUTTON_MIN_HEIGHT
+    POPUP_BUTTON_MIN_WIDTH: int = MODAL_BUTTON_MIN_WIDTH
+    POPUP_BUTTON_SPACING: int = MODAL_BUTTON_SPACING
 
     # 시그널 정의
     prompt_changed = Signal(str)
@@ -61,10 +92,15 @@ class PromptEditor(QWidget):
 
         self._versions: List[Dict[str, str]] = []
         self._variable_values: Dict[str, str] = {}
+        self._manual_variable_keys: set[str] = set()
+        self._deleted_variable_keys: set[str] = set()
         self._highlighters: List[VariableSyntaxHighlighter] = []
         self._save_button: Optional[QPushButton] = None
         self._new_version_button: Optional[QPushButton] = None
         self._rename_version_button: Optional[QPushButton] = None
+        self._add_variable_button: Optional[QPushButton] = None
+        self._delete_variable_button: Optional[QPushButton] = None
+        self._edit_variable_button: Optional[QPushButton] = None
 
         self._setup_ui()
         self._setup_variable_highlighting()
@@ -180,17 +216,70 @@ class PromptEditor(QWidget):
         )
         layout.addWidget(title)
 
-        self._variables_table = QTableWidget(0, 2)
-        self._variables_table.setHorizontalHeaderLabels(["Variable", "Value"])
+        button_bar = QHBoxLayout()
+        self._add_variable_button = QPushButton("변수 추가")
+        self._delete_variable_button = QPushButton("변수 삭제")
+        self._edit_variable_button = QPushButton("값 편집")
+        for button in (
+            self._add_variable_button,
+            self._delete_variable_button,
+            self._edit_variable_button,
+        ):
+            button.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background-color: {COLOR_BUTTON_BG};
+                    color: {COLOR_TEXT_PRIMARY};
+                    border: none;
+                    border-radius: 6px;
+                    padding: 6px 12px;
+                    font-size: 10pt;
+                    font-weight: 500;
+                }}
+                QPushButton:hover {{
+                    background-color: {COLOR_BUTTON_HOVER};
+                }}
+                QPushButton:pressed {{
+                    background-color: {COLOR_ACCENT};
+                    color: white;
+                }}
+                """
+            )
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_variable_button.setEnabled(False)
+        self._edit_variable_button.setEnabled(False)
+        self._add_variable_button.clicked.connect(self._add_variable_row)
+        self._delete_variable_button.clicked.connect(self._delete_selected_variable)
+        self._edit_variable_button.clicked.connect(self._edit_selected_variable)
+
+        button_bar.addWidget(self._add_variable_button)
+        button_bar.addWidget(self._delete_variable_button)
+        button_bar.addWidget(self._edit_variable_button)
+        button_bar.addStretch()
+        layout.addLayout(button_bar)
+
+        self._variables_table = QTableWidget(0, 3)
+        self._variables_table.setHorizontalHeaderLabels(["Variable", "Value", "Type"])
         self._variables_table.horizontalHeader().setSectionResizeMode(
-            0,
+            self._COL_VARIABLE,
             QHeaderView.ResizeMode.ResizeToContents,
         )
         self._variables_table.horizontalHeader().setSectionResizeMode(
-            1,
+            self._COL_VALUE,
             QHeaderView.ResizeMode.Stretch,
         )
+        self._variables_table.horizontalHeader().setSectionResizeMode(
+            self._COL_SOURCE,
+            QHeaderView.ResizeMode.ResizeToContents,
+        )
         self._variables_table.verticalHeader().setVisible(False)
+        self._variables_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self._variables_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self._variables_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._variables_table.setStyleSheet(
             f"""
             QTableWidget {{
@@ -209,43 +298,368 @@ class PromptEditor(QWidget):
             """
         )
         self._variables_table.itemChanged.connect(self._on_variable_item_changed)
+        self._variables_table.itemSelectionChanged.connect(
+            self._on_variable_selection_changed
+        )
+        self._variables_table.itemDoubleClicked.connect(
+            self._on_variable_item_double_clicked
+        )
+        self._variables_table.installEventFilter(self)
         layout.addWidget(self._variables_table)
 
         widget.setLayout(layout)
         return widget
 
     def _on_variable_item_changed(self, item: QTableWidgetItem) -> None:
-        if item.column() != 1:
+        if item.column() != self._COL_VALUE:
             return
-        key_item = self._variables_table.item(item.row(), 0)
+        key_item = self._variables_table.item(item.row(), self._COL_VARIABLE)
         if key_item is None:
             return
         self._variable_values[key_item.text()] = item.text()
 
+    def _on_variable_selection_changed(self) -> None:
+        selected_key = self._get_selected_variable_key()
+        has_selection = selected_key is not None
+        if self._delete_variable_button is not None:
+            self._delete_variable_button.setEnabled(has_selection)
+        if self._edit_variable_button is not None:
+            self._edit_variable_button.setEnabled(has_selection)
+
+    def _on_variable_item_double_clicked(self, item: QTableWidgetItem) -> None:
+        if item.column() != self._COL_VALUE:
+            return
+        variable_key = self._get_item_variable_key(item.row())
+        if variable_key is None:
+            return
+        self._open_variable_editor(variable_key)
+
+    def _get_item_variable_key(self, row: int) -> Optional[str]:
+        key_item = self._variables_table.item(row, self._COL_VARIABLE)
+        if key_item is None:
+            return None
+        return key_item.text()
+
+    def _get_selected_variable_key(self) -> Optional[str]:
+        selected_items = self._variables_table.selectedItems()
+        if not selected_items:
+            return None
+        return self._get_item_variable_key(selected_items[0].row())
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._variables_table and isinstance(event, QKeyEvent):
+            if event.type() == QEvent.Type.KeyPress and event.key() in {
+                Qt.Key.Key_Delete,
+                Qt.Key.Key_Backspace,
+            }:
+                self._delete_selected_variable()
+                return True
+
+        return super().eventFilter(watched, event)
+
+    def _select_variable_row(self, variable_key: str) -> None:
+        for row in range(self._variables_table.rowCount()):
+            if self._get_item_variable_key(row) == variable_key:
+                self._variables_table.selectRow(row)
+                return
+
+    def _value_preview(self, value: str) -> str:
+        sanitized_value = value.replace("\n", "\\n")
+        if len(sanitized_value) <= self._VALUE_PREVIEW_MAX_LENGTH:
+            return sanitized_value
+        return sanitized_value[: self._VALUE_PREVIEW_MAX_LENGTH - 3] + "..."
+
     def _refresh_variables_panel(self) -> None:
-        variables = sorted(self.detect_variables())
-        valid_keys = set(variables)
-        self._variable_values = {
-            key: value
-            for key, value in self._variable_values.items()
-            if key in valid_keys
+        detected_variables = self.detect_variables()
+        for variable in detected_variables:
+            self._variable_values.setdefault(variable, "")
+
+        detected_set = set(detected_variables)
+        all_stored_keys = {
+            variable
+            for variable in self._variable_values
+            if variable not in self._deleted_variable_keys
         }
+        sorted_detected_variables = sorted(
+            variable
+            for variable in detected_variables
+            if variable not in self._deleted_variable_keys
+        )
+        sorted_manual_variables = sorted(
+            variable
+            for variable in self._manual_variable_keys
+            if variable not in detected_set
+            and variable not in self._deleted_variable_keys
+        )
+        sorted_unused_variables = sorted(
+            variable
+            for variable in all_stored_keys
+            if variable not in detected_set
+            and variable not in self._manual_variable_keys
+        )
+        visible_variables = (
+            sorted_detected_variables
+            + sorted_manual_variables
+            + sorted_unused_variables
+        )
+        current_selection = self._get_selected_variable_key()
 
         self._variables_table.blockSignals(True)
-        self._variables_table.setRowCount(len(variables))
+        self._variables_table.setRowCount(len(visible_variables))
 
-        for row, variable in enumerate(variables):
+        for row, variable in enumerate(visible_variables):
             key_item = QTableWidgetItem(variable)
             key_item.setFlags(key_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            value_item = QTableWidgetItem(self._variable_values.get(variable, ""))
-            self._variables_table.setItem(row, 0, key_item)
-            self._variables_table.setItem(row, 1, value_item)
+
+            value = self._variable_values.get(variable, "")
+            value_item = QTableWidgetItem(self._value_preview(value))
+            value_item.setFlags(value_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            value_item.setToolTip(value)
+
+            source = "Detected"
+            if variable in self._manual_variable_keys:
+                source = "Manual"
+            elif variable not in detected_set:
+                source = "Unused"
+            source_item = QTableWidgetItem(source)
+            source_item.setFlags(source_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+
+            self._variables_table.setItem(row, self._COL_VARIABLE, key_item)
+            self._variables_table.setItem(row, self._COL_VALUE, value_item)
+            self._variables_table.setItem(row, self._COL_SOURCE, source_item)
 
         self._variables_table.blockSignals(False)
+        self._on_variable_selection_changed()
+        if current_selection is not None:
+            self._select_variable_row(current_selection)
+
+    def _create_variable_popup(
+        self,
+        title: str,
+        subtitle: str,
+    ) -> tuple[QDialog, QVBoxLayout]:
+        dialog = QDialog(self)
+        card_layout = setup_modal_dialog(
+            dialog,
+            object_name="promptEditorPopup",
+            min_width=self.POPUP_MIN_WIDTH,
+        )
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(get_modal_title_style())
+        card_layout.addWidget(title_label)
+
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setWordWrap(True)
+        subtitle_label.setStyleSheet(get_modal_subtitle_style())
+        card_layout.addWidget(subtitle_label)
+        return dialog, card_layout
+
+    def _center_variable_popup(self, dialog: QDialog) -> None:
+        QTimer.singleShot(
+            0,
+            lambda: center_dialog_on_parent_or_screen(dialog, self.window()),
+        )
+
+    def _add_dialog_buttons(
+        self,
+        layout: QVBoxLayout,
+        on_cancel: Any,
+        on_accept: Any,
+        accept_label: str,
+    ) -> None:
+        button_bar = QHBoxLayout()
+        button_bar.setSpacing(self.POPUP_BUTTON_SPACING)
+        button_bar.addStretch()
+
+        cancel_button = QPushButton("취소")
+        cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_button.setStyleSheet(
+            f"{get_modal_secondary_button_style()}\n{get_modal_button_size_style()}"
+        )
+        cancel_button.setMinimumHeight(self.POPUP_BUTTON_MIN_HEIGHT)
+        cancel_button.setMinimumWidth(self.POPUP_BUTTON_MIN_WIDTH)
+        cancel_button.clicked.connect(on_cancel)
+        button_bar.addWidget(cancel_button)
+
+        accept_button = QPushButton(accept_label)
+        accept_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        accept_button.setStyleSheet(
+            f"{get_modal_primary_button_style()}\n{get_modal_button_size_style()}"
+        )
+        accept_button.setMinimumHeight(self.POPUP_BUTTON_MIN_HEIGHT)
+        accept_button.setMinimumWidth(self.POPUP_BUTTON_MIN_WIDTH)
+        accept_button.clicked.connect(on_accept)
+        button_bar.addWidget(accept_button)
+
+        layout.addLayout(button_bar)
+
+    def _prompt_variable_name(self) -> Optional[str]:
+        dialog, layout = self._create_variable_popup(
+            title="변수 추가",
+            subtitle="영문, 숫자, 밑줄(_), 하이픈(-)만 허용됩니다.",
+        )
+
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("변수명(영문/숫자/_/-)")
+        name_input.setMinimumHeight(self.POPUP_INPUT_MIN_HEIGHT)
+        name_input.setFocus()
+        name_input.setStyleSheet(get_modal_line_edit_style())
+        layout.addWidget(name_input)
+
+        confirm: Dict[str, object] = {}
+
+        def accept_with_value() -> None:
+            confirm["value"] = name_input.text().strip()
+            dialog.accept()
+
+        name_input.returnPressed.connect(accept_with_value)
+
+        self._add_dialog_buttons(
+            layout,
+            on_cancel=dialog.reject,
+            on_accept=accept_with_value,
+            accept_label="추가",
+        )
+
+        self._center_variable_popup(dialog)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        value = confirm.get("value")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return value.strip()
+
+    def _confirm_delete_variable(self, variable_key: str) -> bool:
+        dialog, layout = self._create_variable_popup(
+            title="변수 삭제",
+            subtitle=f"변수 '{variable_key}'를 삭제하시겠어요?\n삭제된 값은 복구할 수 없습니다.",
+        )
+
+        confirm: Dict[str, bool] = {"value": False}
+
+        def on_cancel() -> None:
+            confirm["value"] = False
+            dialog.reject()
+
+        def on_delete() -> None:
+            confirm["value"] = True
+            dialog.accept()
+
+        button_bar = QHBoxLayout()
+        button_bar.setSpacing(self.POPUP_BUTTON_SPACING)
+        button_bar.addStretch()
+
+        cancel_button = QPushButton("취소")
+        cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_button.setStyleSheet(
+            f"{get_modal_secondary_button_style()}\n{get_modal_button_size_style()}"
+        )
+        cancel_button.setMinimumHeight(self.POPUP_BUTTON_MIN_HEIGHT)
+        cancel_button.setMinimumWidth(self.POPUP_BUTTON_MIN_WIDTH)
+        cancel_button.clicked.connect(on_cancel)
+        button_bar.addWidget(cancel_button)
+
+        delete_button = QPushButton("삭제")
+        delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_button.setStyleSheet(
+            f"{get_modal_error_button_style()}\n{get_modal_button_size_style()}"
+        )
+        delete_button.setMinimumHeight(self.POPUP_BUTTON_MIN_HEIGHT)
+        delete_button.setMinimumWidth(self.POPUP_BUTTON_MIN_WIDTH)
+        delete_button.clicked.connect(on_delete)
+        button_bar.addWidget(delete_button)
+
+        layout.addLayout(button_bar)
+
+        self._center_variable_popup(dialog)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        return bool(confirm.get("value"))
+
+    def _add_variable_row(self) -> None:
+        variable_name = self._prompt_variable_name()
+        if variable_name is None:
+            return
+        if not re.fullmatch(self._VARIABLE_NAME_PATTERN, variable_name):
+            QMessageBox.warning(
+                self,
+                "입력 확인",
+                "변수명은 영문, 숫자, 밑줄(_), 하이픈(-)만 허용합니다.",
+            )
+            return
+        self._deleted_variable_keys.discard(variable_name)
+        self._manual_variable_keys.add(variable_name)
+        self._variable_values.setdefault(variable_name, "")
+        self._refresh_variables_panel()
+        self._select_variable_row(variable_name)
+        self._open_variable_editor(variable_name)
+
+    def _delete_selected_variable(self) -> None:
+        selected_key = self._get_selected_variable_key()
+        if selected_key is None:
+            return
+        if not self._confirm_delete_variable(selected_key):
+            return
+        self._deleted_variable_keys.add(selected_key)
+        self._manual_variable_keys.discard(selected_key)
+        self._refresh_variables_panel()
+
+    def _edit_selected_variable(self) -> None:
+        selected_key = self._get_selected_variable_key()
+        if selected_key is None:
+            return
+        self._open_variable_editor(selected_key)
+
+    def _open_variable_editor(self, variable_key: str) -> None:
+        dialog, layout = self._create_variable_popup(
+            title=f"변수 값 편집 - {variable_key}",
+            subtitle="값을 입력한 뒤 저장을 눌러 반영하세요.",
+        )
+
+        editor = QPlainTextEdit()
+        editor.setMinimumHeight(180)
+        editor.setPlainText(self._variable_values.get(variable_key, ""))
+        editor.setStyleSheet(get_modal_text_area_style())
+
+        layout.addWidget(editor)
+
+        def on_accept() -> None:
+            dialog.accept()
+
+        self._add_dialog_buttons(
+            layout,
+            on_cancel=dialog.reject,
+            on_accept=on_accept,
+            accept_label="저장",
+        )
+
+        self._center_variable_popup(dialog)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self._variable_values[variable_key] = editor.toPlainText()
+        self._manual_variable_keys.add(variable_key)
+        self._deleted_variable_keys.discard(variable_key)
+        self._refresh_variables_panel()
+
+    def set_variable_value(self, variable_key: str, value: str) -> None:
+        self._variable_values[variable_key] = value
+        self._manual_variable_keys.add(variable_key)
+        self._deleted_variable_keys.discard(variable_key)
+        self._refresh_variables_panel()
 
     def get_variable_values(self) -> Dict[str, str]:
         self._refresh_variables_panel()
-        return dict(self._variable_values)
+        return {
+            key: value
+            for key, value in self._variable_values.items()
+            if key not in self._deleted_variable_keys
+        }
 
     def _create_version_toolbar(self) -> QWidget:
         """버전 타임라인 툴바 생성

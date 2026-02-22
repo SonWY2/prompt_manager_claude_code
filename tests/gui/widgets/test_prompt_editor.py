@@ -12,6 +12,7 @@ PromptEditor 위젯 테스트
 
 from PySide6.QtWidgets import QPlainTextEdit, QTabWidget
 from PySide6.QtTest import QTest
+from PySide6.QtCore import Qt
 
 from src.gui.widgets.prompt_editor import PromptEditor
 from src.gui.widgets.prompt_highlighter import VariableSyntaxHighlighter
@@ -288,3 +289,35 @@ class TestPromptEditor:
         assert len(widget._highlighters) == 2
         for highlighter in widget._highlighters:
             assert isinstance(highlighter, VariableSyntaxHighlighter)
+
+    def test_variable_value_preview_replaces_newlines(self, qtbot):
+        widget = PromptEditor()
+        qtbot.addWidget(widget)
+        widget.show()
+
+        widget.set_variable_value("greeting", "안녕하세요\n여러 줄\n메시지")
+        qtbot.wait(50)
+
+        assert widget._variables_table.rowCount() == 1
+        value_item = widget._variables_table.item(0, 1)
+        assert value_item is not None
+        assert "\\n" in value_item.text()
+
+    def test_delete_key_removes_selected_variable(self, qtbot, monkeypatch):
+        widget = PromptEditor()
+        qtbot.addWidget(widget)
+        widget.show()
+
+        widget.set_variable_value("temp_var", "delete-me")
+        widget._select_variable_row("temp_var")
+        widget._variables_table.setFocus()
+
+        def allow_delete(variable_key: str) -> bool:
+            return variable_key == "temp_var"
+
+        monkeypatch.setattr(widget, "_confirm_delete_variable", allow_delete)
+
+        QTest.keyClick(widget._variables_table, Qt.Key.Key_Delete)
+        qtbot.wait(100)
+
+        assert "temp_var" not in widget.get_variable_values()
