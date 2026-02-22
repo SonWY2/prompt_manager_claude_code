@@ -9,12 +9,16 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from typing import Any
+
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QGraphicsDropShadowEffect,
+    QMessageBox,
+    QInputDialog,
     QVBoxLayout,
     QWidget,
     QLabel,
@@ -227,17 +231,95 @@ def center_dialog_on_parent_or_screen(
     if target_widget is None:
         target_widget = dialog.parentWidget()
 
-    if target_widget is not None and target_widget.isVisible():
-        target_center = target_widget.mapToGlobal(target_widget.rect().center())
+    target_center = None
+    if (
+        target_widget is not None
+        and target_widget.width() > 0
+        and target_widget.height() > 0
+    ):
+        mapped_center = target_widget.mapToGlobal(target_widget.rect().center())
+        if target_widget.isWindow():
+            frame_center = target_widget.frameGeometry().center()
+            if mapped_center == QPoint(0, 0) and frame_center != QPoint(0, 0):
+                target_center = frame_center
+            elif frame_center != QPoint(0, 0):
+                target_center = frame_center
+            else:
+                target_center = mapped_center
+        else:
+            target_center = mapped_center
     else:
         screen = dialog.screen() or QApplication.primaryScreen()
         if screen is None:
             return
         target_center = screen.availableGeometry().center()
 
-    dialog_x = int(target_center.x() - (dialog.width() / 2))
-    dialog_y = int(target_center.y() - (dialog.height() / 2))
+    if target_center is None:
+        return
+
+    if hasattr(dialog, "size"):
+        dialog_size = dialog.size()
+    elif hasattr(dialog, "width") and hasattr(dialog, "height"):
+        dialog_size = QSize(dialog.width(), dialog.height())
+    else:
+        dialog_size = QSize()
+
+    dialog_x = int(target_center.x() - (dialog_size.width() / 2))
+    dialog_y = int(target_center.y() - (dialog_size.height() / 2))
     dialog.move(dialog_x, dialog_y)
+
+
+class CenteredDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        anchor: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._center_anchor = anchor
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        center_dialog_on_parent_or_screen(self, self._center_anchor)
+        QTimer.singleShot(
+            0, lambda: center_dialog_on_parent_or_screen(self, self._center_anchor)
+        )
+
+
+class CenteredMessageBox(QMessageBox):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        anchor: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._center_anchor = anchor
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        center_dialog_on_parent_or_screen(self, self._center_anchor)
+        QTimer.singleShot(
+            0, lambda: center_dialog_on_parent_or_screen(self, self._center_anchor)
+        )
+
+
+class CenteredInputDialog(QInputDialog):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        anchor: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._center_anchor = anchor
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        center_dialog_on_parent_or_screen(self, self._center_anchor)
+        QTimer.singleShot(
+            0, lambda: center_dialog_on_parent_or_screen(self, self._center_anchor)
+        )
 
 
 # ============================================================================

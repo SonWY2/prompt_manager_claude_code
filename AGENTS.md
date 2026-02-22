@@ -1,6 +1,6 @@
 # AI Agents Development Guide
 
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-02-22
 
 ## Overview
 
@@ -65,6 +65,20 @@ This document defines the development standards and architectural patterns that 
   - Include actual usage examples and code samples
   - Specify dependencies and interactions between modules
 - **Purpose**: Help developers quickly understand and utilize the structure and behavior of modules.
+
+### 2.5. Module Map & Documentation Synchronization
+- **Rule**: Always reference the repository module map before editing code, and keep the module map in sync with major code changes.
+- **Implementation**:
+  - Use the module map in this document as the first source of truth for deciding where to read/edit code.
+  - Treat the following as synchronization triggers:
+    - File/folder add, delete, rename, or move in `src/`
+    - Public interface changes (constructor signature, exported class/function, cross-module contract)
+    - Dependency direction changes across `gui/core/data/utils`
+    - Plugin hook/interface changes (`TaskPlugin`, `LLMPlugin`, `ProviderPlugin`)
+    - Integration boundary changes (entrypoint flow, prompt execution flow, snapshot format)
+  - Apply code and document updates in the same change set whenever possible.
+  - On mismatch between docs and code, update `AGENTS.md` first, then align `usage.md` and `README.md`.
+- **Purpose**: Prevent stale architecture docs and ensure every action references the correct module boundary.
 
 ---
 
@@ -257,26 +271,108 @@ When requesting work from an AI Agent, activate the following rule:
 
 Before starting work:
 - [ ] Familiarize yourself with architectural patterns in `AGENTS.md`
+- [ ] Locate target code via the repository module map first (do not jump across layers blindly)
 - [ ] Check file length (keep within 500 lines)
 - [ ] Discuss decisions with user
 - [ ] Confirm inclusion of `[overview]`, `[description]` tags
+- [ ] Identify whether `AGENTS.md` module map sync is required for this change
 
 During development:
 - [ ] Maintain modularity (single responsibility principle)
 - [ ] Ensure independence (prevent side effects)
 - [ ] Confirm no Magic Numbers
 - [ ] Follow plugin pattern (extensible features)
+- [ ] Keep code updates and module-map documentation updates in the same work unit when triggers are met
 
 When completing work:
 - [ ] Confirm file length is 500 lines or less
 - [ ] Complete documentation ([overview], [description])
 - [ ] When creating module, write usage.md and include diagrams
+- [ ] Verify `AGENTS.md` module map still matches actual `src/` structure and dependency direction
 - [ ] No LSP Diagnostics errors
 - [ ] Verify compliance with architectural standards
 
 ---
 
-## 9. FAQ
+## 9. Repository Module Map (Authoritative)
+
+### 9.1. Runtime Entry Flow
+
+```
+main.py
+  -> src/gui/main.py
+       -> src/gui/main_window.py
+
+run.py
+  -> src/gui/main_window.py
+```
+
+### 9.2. Layer Map and Responsibilities
+
+- `src/gui/`:
+  - UI composition and user interaction orchestration.
+  - Key orchestrators:
+    - `src/gui/main_window.py`: main coordinator for task/version/provider flows.
+    - `src/gui/main_window_ui.py`: menu/toolbar/layout assembly.
+    - `src/gui/prompt_runner.py`: prompt render + LLM call + result viewer update.
+  - GUI helper/integration modules:
+    - `src/gui/main_window_helpers.py`, `src/gui/main_window_constants.py`
+    - `src/gui/theme.py`, `src/gui/qt_platform.py`
+    - `src/gui/widgets/modal_dialog_factory.py`, `src/gui/widgets/result_viewer_styles.py`
+  - Feature widgets:
+    - task/prompt/result widgets and provider management widgets under `src/gui/widgets/`.
+
+- `src/core/`:
+  - Main business logic and extension hooks.
+  - Domain managers:
+    - `task_manager.py`, `version_manager.py`, `provider_manager.py`, `llm_service.py`
+  - Supporting domain logic:
+    - `template_engine.py`, `prompt_snapshot.py`, `plugin_interface.py`
+
+- `src/data/`:
+  - Persistent model and repository layer.
+  - `models.py` (Pydantic models), `repository.py` (CRUD abstraction), `database.py` (TinyDB lifecycle).
+
+- `src/utils/`:
+  - Shared, domain-independent utilities and constants.
+  - `config.py`, `id_generator.py`, `string_utils.py`, `logger.py`
+
+### 9.3. Dependency Direction Rules
+
+- Primary allowed direction:
+  - `Entrypoint -> GUI -> Core -> Data -> Utils`
+- Additional allowed path:
+  - `GUI -> Data models` only for UI representation needs (for example provider dialog/list typing).
+- Forbidden direction:
+  - `Data -> Core/GUI`
+  - `Core -> GUI`
+  - `Utils -> Core/Data/GUI`
+
+### 9.4. Plugin and Extension Boundaries
+
+- `TaskPlugin` interface: `src/core/plugin_interface.py`, executed by `TaskManager` hooks.
+- `LLMPlugin` interface: `src/core/llm_service.py`, executed at `before_call` and `after_call` hooks.
+- `ProviderPlugin` interface: `src/core/provider_manager.py`, executed around provider lifecycle and connection test hooks.
+- Plugin implementation location policy:
+  - Place concrete plugin implementations in a module-local `plugins/` directory when introduced.
+  - Current repository state: interfaces/hooks exist, but concrete `plugins/` implementations are not yet present.
+
+### 9.5. Special Integration Boundaries
+
+- Prompt execution boundary: `src/gui/prompt_runner.py`
+  - Converts editor input to rendered prompt and delegates LLM execution.
+- Prompt snapshot boundary: `src/core/prompt_snapshot.py`
+  - Owns serialize/deserialize contract for `Version.content` payload.
+
+### 9.6. Module Map Maintenance Rules
+
+- Any trigger in section 2.5 requires updating this section (`## 9`) in the same work stream.
+- If code and map diverge, architecture corrections must be documented here before task completion.
+- This section is the mandatory reference point for future code navigation and edit planning.
+
+---
+
+## 10. FAQ
 
 **Q: What if I need code longer than 500 lines?**
 A: Separate functionality logically into multiple modules.
@@ -295,6 +391,9 @@ A: Write under the corresponding folder whenever a new module (folder) is create
 
 **Q: What diagrams should be included in usage.md?**
 A: Include necessary diagrams in ASCII art format depending on module characteristics: Class Diagram (class structure), Sequence Diagram (method call flow), State Diagram (state transitions).
+
+**Q: When must I update the module map in AGENTS.md?**
+A: Update it whenever a module boundary, dependency direction, public cross-module interface, plugin hook/interface, or integration flow changes.
 
 ---
 

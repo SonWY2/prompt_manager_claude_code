@@ -11,7 +11,7 @@ from __future__ import annotations
 from unittest.mock import Mock
 from typing import Any, Optional
 
-from PySide6.QtCore import QObject, QThread, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QThread, Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QMessageBox,
@@ -26,10 +26,11 @@ from src.gui.theme import COLOR_BORDER, COLOR_SIDEBAR, COLOR_TEXT_PRIMARY
 from src.gui.widgets.provider_config_panel import ProviderConfigPanel
 from src.gui.widgets.provider_list_panel import ProviderListPanel
 from src.gui.widgets.modal_dialog_factory import (
+    CenteredInputDialog,
+    CenteredMessageBox,
     MODAL_BUTTON_MIN_HEIGHT,
     MODAL_BUTTON_MIN_WIDTH,
     MODAL_MIN_WIDTH,
-    center_dialog_on_parent_or_screen,
     get_modal_button_size_style,
     get_modal_title_style,
 )
@@ -154,7 +155,7 @@ class ProviderManagementWidget(QWidget):
                 return result
             return int(QMessageBox.StandardButton.Ok)
 
-        dialog = QMessageBox(self)
+        dialog = CenteredMessageBox(self, anchor=self)
         dialog.setIcon(icon)
         dialog.setWindowTitle(title)
         dialog.setText(text)
@@ -168,10 +169,6 @@ class ProviderManagementWidget(QWidget):
             MODAL_BUTTON_MIN_WIDTH
         )
 
-        QTimer.singleShot(
-            0,
-            lambda: center_dialog_on_parent_or_screen(dialog, self),
-        )
         return int(dialog.exec())
 
     def _show_warning(self, title: str, text: str) -> int:
@@ -191,7 +188,7 @@ class ProviderManagementWidget(QWidget):
                 return result == int(QMessageBox.StandardButton.Yes)
             return bool(result)
 
-        dialog = QMessageBox(self)
+        dialog = CenteredMessageBox(self, anchor=self)
         dialog.setIcon(QMessageBox.Icon.Warning)
         dialog.setWindowTitle("Delete Provider")
         dialog.setText(
@@ -214,10 +211,6 @@ class ProviderManagementWidget(QWidget):
                 btn.setMinimumWidth(MODAL_BUTTON_MIN_WIDTH)
                 btn.setText(text)
 
-        QTimer.singleShot(
-            0,
-            lambda: center_dialog_on_parent_or_screen(dialog, self),
-        )
         return dialog.exec() == QMessageBox.StandardButton.Yes
 
     def _ask_new_provider_name(self) -> tuple[str, bool]:
@@ -225,7 +218,7 @@ class ProviderManagementWidget(QWidget):
             name, ok = QInputDialog.getText(self, "New Provider", "Provider name:")
             return str(name).strip(), bool(ok)
 
-        input_dialog = QInputDialog(self)
+        input_dialog = CenteredInputDialog(self, anchor=self)
         input_dialog.setWindowTitle("New Provider")
         input_dialog.setLabelText("Provider name:")
         input_dialog.setTextValue("")
@@ -233,11 +226,6 @@ class ProviderManagementWidget(QWidget):
             f"{get_modal_title_style()}\nQInputDialog {{ background-color: {COLOR_SIDEBAR}; }}"
         )
         input_dialog.setMinimumWidth(MODAL_MIN_WIDTH)
-
-        QTimer.singleShot(
-            0,
-            lambda: center_dialog_on_parent_or_screen(input_dialog, self),
-        )
         result = input_dialog.exec()
         return input_dialog.textValue(), result == QDialog.DialogCode.Accepted
 

@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStatusBar,
 )
-from PySide6.QtCore import QTimer
 from src.core.prompt_snapshot import (
     deserialize_prompt_snapshot,
     serialize_prompt_snapshot,
@@ -41,9 +40,9 @@ from src.gui.main_window_constants import (
 )
 from src.gui.widgets.modal_dialog_factory import (
     MODAL_MIN_WIDTH,
-    center_dialog_on_parent_or_screen,
     get_modal_button_size_style,
     get_modal_error_button_style,
+    CenteredMessageBox,
     get_modal_secondary_button_style,
 )
 from src.gui.main_window_helpers import ask_text_input, get_version_display_text
@@ -217,7 +216,7 @@ class MainWindow(QMainWindow):
                 return result == int(QMessageBox.StandardButton.Yes)
             return bool(result)
 
-        dialog = QMessageBox(self)
+        dialog = CenteredMessageBox(self, anchor=self)
         dialog.setIcon(QMessageBox.Icon.Warning)
         dialog.setWindowTitle(TASK_DELETE_DIALOG_TITLE)
         dialog.setText(
@@ -243,9 +242,7 @@ class MainWindow(QMainWindow):
                 btn.setText(text)
                 btn.setStyleSheet(f"{get_modal_button_size_style()}\n{style}")
 
-        QTimer.singleShot(0, lambda: center_dialog_on_parent_or_screen(dialog, self))
-
-        return dialog.exec() == QMessageBox.StandardButton.Yes
+        return dialog.exec() == int(QMessageBox.StandardButton.Yes)
 
     def _on_task_delete_requested(self, task_id: str) -> None:
         task = self._task_manager.get_task(task_id)
@@ -289,7 +286,6 @@ class MainWindow(QMainWindow):
             self._save_current_task_prompt()
 
         dialog = NewTaskDialog(self)
-        dialog.center_on_parent_or_screen()
         task_name = (
             dialog.task_name if dialog.exec() == QDialog.DialogCode.Accepted else ""
         )

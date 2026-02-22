@@ -168,10 +168,10 @@ def test_test_connection_prevents_concurrent_test(qtbot, monkeypatch):
 
 def test_test_connection_success_updates_button_and_status(qtbot, monkeypatch):
     manager = _build_provider_manager()
-    manager.test_connection.return_value = {
-        "success": True,
-        "message": "Connection successful",
-    }
+    test_connection_mock = Mock(
+        return_value={"success": True, "message": "Connection successful"}
+    )
+    monkeypatch.setattr(manager, "test_connection", test_connection_mock)
 
     widget = ProviderManagementWidget(manager)
     qtbot.addWidget(widget)
@@ -204,7 +204,7 @@ def test_test_connection_success_updates_button_and_status(qtbot, monkeypatch):
         }
     )
 
-    assert manager.test_connection.called
+    assert test_connection_mock.called
     assert status_mock.call_args == (("provider_1", "connected"),)
     assert widget._config_panel.test_button.text() == "Test Connection"
     assert widget._config_panel.test_button.isEnabled()
@@ -214,10 +214,10 @@ def test_test_connection_success_updates_button_and_status(qtbot, monkeypatch):
 
 def test_test_connection_failure_updates_button_and_status(qtbot, monkeypatch):
     manager = _build_provider_manager()
-    manager.test_connection.return_value = {
-        "success": False,
-        "message": "Connection failed",
-    }
+    test_connection_mock = Mock(
+        return_value={"success": False, "message": "Connection failed"}
+    )
+    monkeypatch.setattr(manager, "test_connection", test_connection_mock)
 
     widget = ProviderManagementWidget(manager)
     qtbot.addWidget(widget)
@@ -257,3 +257,63 @@ def test_test_connection_failure_updates_button_and_status(qtbot, monkeypatch):
     assert widget._config_panel.test_button.isEnabled()
     assert widget.test_thread is None
     assert widget.test_worker is None
+
+
+def test_on_provider_deleted_cancelled_by_user(qtbot, monkeypatch):
+    manager = _build_provider_manager()
+    widget = ProviderManagementWidget(manager)
+    qtbot.addWidget(widget)
+
+    monkeypatch.setattr(widget, "_confirm_delete_provider", Mock(return_value=False))
+    manager.delete_provider = Mock(return_value=True)
+
+    widget._provider_list_panel.refresh_provider_list = Mock()
+    widget._config_panel.clear_fields = Mock()
+    widget._show_warning = Mock()
+
+    deleted: list[str] = []
+    widget.provider_deleted.connect(lambda provider_id: deleted.append(provider_id))
+
+    widget._on_provider_deleted("provider_1")
+
+    assert deleted == []
+    assert manager.delete_provider.call_count == 0
+    widget._provider_list_panel.refresh_provider_list.assert_not_called()
+
+
+def test_on_provider_deleted_approves_and_updates_ui(qtbot, monkeypatch):
+    manager = _build_provider_manager()
+    widget = ProviderManagementWidget(manager)
+    qtbot.addWidget(widget)
+
+    manager.delete_provider = Mock(return_value=True)
+    monkeypatch.setattr(widget, "_confirm_delete_provider", Mock(return_value=True))
+
+    widget._provider_list_panel.refresh_provider_list = Mock()
+    widget._config_panel.clear_fields = Mock()
+    widget._config_panel.current_provider_id = "provider_1"
+
+    deleted: list[str] = []
+    widget.provider_deleted.connect(lambda provider_id: deleted.append(provider_id))
+
+    widget._on_provider_deleted("provider_1")
+
+    assert manager.delete_provider.call_args == (("provider_1",), {})
+    assert deleted == ["provider_1"]
+    widget._provider_list_panel.refresh_provider_list.assert_called_once_with()
+    widget._config_panel.clear_fields.assert_called_once_with()
+
+
+def test_on_provider_deleted_shows_warning_if_not_found(qtbot):
+    manager = _build_provider_manager()
+    widget = ProviderManagementWidget(manager)
+    qtbot.addWidget(widget)
+
+    manager.get_provider = Mock(return_value=None)
+    widget._show_warning = Mock()
+
+    widget._on_provider_deleted("unknown")
+
+    widget._show_warning.assert_called_once_with(
+        "Delete Provider", "Provider not found."
+    )

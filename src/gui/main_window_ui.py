@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDialog,
@@ -33,12 +33,12 @@ from src.gui.widgets.modal_dialog_factory import (
     MODAL_BUTTON_MIN_HEIGHT,
     MODAL_BUTTON_MIN_WIDTH,
     MODAL_BUTTON_SPACING,
+    CenteredDialog,
     get_modal_button_size_style,
     get_modal_primary_button_style,
     get_modal_subtitle_style,
     get_modal_title_style,
     setup_modal_dialog,
-    center_dialog_on_parent_or_screen,
 )
 
 
@@ -237,7 +237,7 @@ def open_provider_settings_dialog(
     provider_manager: ProviderManager,
     on_accepted: Callable[[], None],
 ) -> None:
-    dialog = QDialog(parent)
+    dialog = CenteredDialog(parent, anchor=parent)
     dialog.setWindowTitle("LLM Provider Settings")
     card_layout = setup_modal_dialog(
         dialog, object_name="providerSettingsDialogCard", min_width=1100
@@ -278,8 +278,6 @@ def open_provider_settings_dialog(
     card_layout.addLayout(layout)
 
     provider_management.load_providers()
-    QTimer.singleShot(0, lambda: center_dialog_on_parent_or_screen(dialog, parent))
-
     result = dialog.exec()
     if result == QDialog.DialogCode.Accepted:
         on_accepted()

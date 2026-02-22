@@ -9,8 +9,6 @@ Provider Dialog 구현
 from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QShowEvent
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -29,7 +27,7 @@ from PySide6.QtWidgets import QLabel
 
 from src.data.models import Provider
 from src.gui.widgets.modal_dialog_factory import (
-    center_dialog_on_parent_or_screen,
+    CenteredDialog,
     get_modal_button_size_style,
     get_modal_text_area_style,
     get_modal_line_edit_style,
@@ -58,7 +56,7 @@ DEFAULT_MODELS = [
 ]
 
 
-class ProviderDialog(QDialog):
+class ProviderDialog(CenteredDialog):
     """
     [overview]
     Provider 다이얼로그 위젯
@@ -76,7 +74,7 @@ class ProviderDialog(QDialog):
             provider: 편집할 Provider 데이터 (추가 모드일 경우 None)
             parent: 부모 위젯
         """
-        super().__init__(parent)
+        super().__init__(parent=parent)
 
         self.provider = provider
         self.mode = "add" if provider is None else "edit"
@@ -212,13 +210,6 @@ class ProviderDialog(QDialog):
         card_layout.addLayout(layout)
 
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
-
-    def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-        QTimer.singleShot(0, self.center_on_parent_or_screen)
-
-    def center_on_parent_or_screen(self) -> None:
-        center_dialog_on_parent_or_screen(self)
 
     def _connect_signals(self):
         """시그널 연결"""

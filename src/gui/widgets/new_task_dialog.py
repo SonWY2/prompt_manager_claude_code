@@ -6,9 +6,16 @@
 메인 화면에서 새 태스크 이름을 입력받는 모던 스타일 커스텀 다이얼로그입니다.
 """
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QShowEvent
-from PySide6.QtWidgets import QDialog, QLabel, QHBoxLayout, QLineEdit, QWidget, QPushButton
+from PySide6.QtWidgets import (
+    QDialog,
+    QLabel,
+    QHBoxLayout,
+    QLineEdit,
+    QWidget,
+    QPushButton,
+)
 
 from src.gui.widgets.modal_dialog_factory import (
     center_dialog_on_parent_or_screen,
@@ -31,6 +38,7 @@ class NewTaskDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Create New Task")
         self.setMinimumWidth(MODAL_MIN_WIDTH)
+        self._anchor = parent
 
         layout = setup_modal_dialog(self, object_name="newTaskCard")
 
@@ -77,7 +85,7 @@ class NewTaskDialog(QDialog):
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
-        QTimer.singleShot(0, self.center_on_parent_or_screen)
+        center_dialog_on_parent_or_screen(self, self._anchor)
 
     @property
     def task_name(self) -> str:
@@ -89,6 +97,3 @@ class NewTaskDialog(QDialog):
     def _accept_if_valid(self) -> None:
         if self.task_name:
             self.accept()
-
-    def center_on_parent_or_screen(self) -> None:
-        center_dialog_on_parent_or_screen(self)

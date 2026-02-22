@@ -31,29 +31,51 @@ LLM 프롬프트를 관리하고 시험할 수 있는 데스크톱 GUI 애플리
 prompt_manager/
 ├── data/                      # 데이터 스토리지
 │   └── prompts.json           # 프롬프트 데이터 JSON 파일
+├── main.py                    # 루트 실행 진입점
+├── run.py                     # 대체 실행 진입점
 ├── src/
-│   ├── core/                  # 비즈니스 로직
-│   │   ├── task_manager.py    # 태스크 관리
-│   │   ├── version_manager.py # 버전 관리
-│   │   ├── template_engine.py # 템플릿 변수 렌더링
-│   │   └── llm_service.py     # LLM API 서비스
+│   ├── core/                  # 비즈니스 로직 + 확장 훅
+│   │   ├── task_manager.py
+│   │   ├── version_manager.py
+│   │   ├── provider_manager.py
+│   │   ├── llm_service.py
+│   │   ├── template_engine.py
+│   │   ├── prompt_snapshot.py
+│   │   └── plugin_interface.py
 │   ├── data/                  # 데이터 계층
-│   │   ├── models.py          # 데이터 모델 정의
-│   │   ├── database.py        # TinyDB 초기화
-│   │   └── repository.py      # 데이터베이스 CRUD
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   └── database.py
 │   ├── gui/                   # GUI 계층
-│   │   ├── main.py            # 애플리케이션 진입점
-│   │   ├── main_window.py     # 메인 윈도우
-│   │   └── widgets/           # 커스텀 위젯
-│   │       ├── task_navigator.py
-│   │       ├── prompt_editor.py
-│   │       └── result_viewer.py
-│   └── utils/                 # 유틸리티 함수
+│   │   ├── main.py
+│   │   ├── main_window.py
+│   │   ├── main_window_ui.py
+│   │   ├── main_window_helpers.py
+│   │   ├── main_window_constants.py
+│   │   ├── prompt_runner.py
+│   │   ├── qt_platform.py
+│   │   ├── theme.py
+│   │   └── widgets/
+│   └── utils/                 # 공용 유틸리티
+│       ├── config.py
 │       ├── string_utils.py
-│       └── id_generator.py
+│       ├── id_generator.py
+│       └── logger.py
 ├── requirements.txt           # Python 의존성
-└── run.py                     # 실행 스크립트
+└── tests/                     # pytest / pytest-qt
 ```
+
+## 아키텍처 모듈맵 (AGENTS 기준)
+
+- 기준 문서: `AGENTS.md`의 `## 9. Repository Module Map (Authoritative)`
+- 기본 의존 방향: `Entrypoint -> GUI -> Core -> Data -> Utils`
+- 예외 허용: `GUI -> Data models` (UI 표현 목적)
+- 금지 방향: `Data -> Core/GUI`, `Core -> GUI`, `Utils -> Core/Data/GUI`
+- 플러그인 경계:
+  - `TaskPlugin` (`src/core/plugin_interface.py`, `TaskManager` 훅)
+  - `LLMPlugin` (`src/core/llm_service.py`, before/after call 훅)
+  - `ProviderPlugin` (`src/core/provider_manager.py`, provider lifecycle 훅)
+- 동기화 규칙: `src/` 구조/의존성/공개 인터페이스/플러그인 훅이 변경되면 `AGENTS.md` 모듈맵을 같은 변경 단위에서 함께 갱신
 
 ## 설치 및 실행
 

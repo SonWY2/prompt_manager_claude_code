@@ -7,9 +7,10 @@ MainWindow 클래스의 3단 QSplitter 레이아웃과 Modern Dark Mode 테마 �
 """
 
 from typing import cast
+from unittest.mock import Mock
 
 from src.data.models import Task, Prompt, Version
-from PySide6.QtWidgets import QDialog, QMainWindow, QSplitter, QWidget
+from PySide6.QtWidgets import QMessageBox, QDialog, QMainWindow, QSplitter, QWidget
 from PySide6.QtCore import Qt
 
 from src.gui.theme import COLOR_ACCENT, COLOR_TEXT_PRIMARY
@@ -677,6 +678,87 @@ class TestMainWindowTaskActions:
         assert get_task_calls == ["get_task"]
         assert rename_calls == [("task-1", "renamed")]
         assert position_calls == ["moved"]
+
+    def test_task_delete_is_cancelled_by_user(self, qtbot, monkeypatch):
+        from src.data.models import Task
+        from src.gui.main_window import MainWindow
+
+        window = MainWindow()
+        qtbot.addWidget(window)
+        window._current_task_id = "task-1"
+
+        task = Task(
+            id="task-1",
+            name="Task One",
+            description=None,
+            is_archived=False,
+            archived_at=None,
+        )
+
+        question_mock = Mock(return_value=QMessageBox.StandardButton.Cancel)
+        archive_mock = Mock()
+        remove_mock = Mock(return_value=True)
+
+        monkeypatch.setattr(window._task_manager, "get_task", lambda *_: task)
+        monkeypatch.setattr(window._task_manager, "archive_task", archive_mock)
+        monkeypatch.setattr(window._task_navigator, "remove_task", remove_mock)
+
+        monkeypatch.setattr("src.gui.main_window.QMessageBox.question", question_mock)
+
+        window._on_task_delete_requested("task-1")
+
+        assert window._current_task_id == "task-1"
+        assert archive_mock.call_count == 0
+        assert remove_mock.call_count == 0
+        assert window._is_task_list_mutation_in_progress is False
+
+    def test_task_delete_approves_and_removes_current_task(self, qtbot, monkeypatch):
+        from src.data.models import Task
+        from src.gui.main_window import MainWindow, VERSION_SELECTOR_DATA_CURRENT
+
+        window = MainWindow()
+        qtbot.addWidget(window)
+        window._current_task_id = "task-1"
+
+        task = Task(
+            id="task-1",
+            name="Task One",
+            description=None,
+            is_archived=False,
+            archived_at=None,
+        )
+
+        question_mock = Mock(return_value=QMessageBox.StandardButton.Yes)
+        archive_mock = Mock(return_value=True)
+        remove_mock = Mock(return_value=True)
+
+        selected_task_calls: list[str] = []
+
+        monkeypatch.setattr(window._task_manager, "get_task", lambda *_: task)
+        monkeypatch.setattr(window._task_manager, "archive_task", archive_mock)
+        monkeypatch.setattr(window._task_navigator, "remove_task", remove_mock)
+        monkeypatch.setattr(
+            window._task_navigator,
+            "get_selected_task_id",
+            lambda: "task-2",
+        )
+        monkeypatch.setattr("src.gui.main_window.QMessageBox.question", question_mock)
+
+        monkeypatch.setattr(
+            window,
+            "_on_task_selected",
+            lambda next_task_id: selected_task_calls.append(next_task_id),
+        )
+
+        window._on_task_delete_requested("task-1")
+
+        assert archive_mock.call_args == (("task-1",), {})
+        assert remove_mock.call_args == (("task-1",), {})
+        assert selected_task_calls == ["task-2"]
+        assert window._current_task_id is None
+        assert window._selected_version_key == VERSION_SELECTOR_DATA_CURRENT
+        assert window._is_task_list_mutation_in_progress is False
+        assert window.statusBar().currentMessage() == "Deleted"
 
 
 class TestMainWindowPanels:

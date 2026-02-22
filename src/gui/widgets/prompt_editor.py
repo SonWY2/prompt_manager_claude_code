@@ -13,8 +13,8 @@
 import re
 from typing import List, Dict, Optional, cast, Any
 
-from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
-from PySide6.QtGui import QKeyEvent, QTextDocument
+from PySide6.QtCore import QEvent, QObject, Qt, Signal, QTimer
+from PySide6.QtGui import QKeyEvent, QShowEvent, QTextDocument
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -63,6 +63,23 @@ from src.gui.widgets.modal_dialog_factory import (
     setup_modal_dialog,
 )
 from src.gui.widgets.prompt_highlighter import VariableSyntaxHighlighter
+
+
+class _PromptEditorVariableDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget | None,
+        anchor: QWidget,
+    ) -> None:
+        super().__init__(parent)
+        self._anchor = anchor
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        center_dialog_on_parent_or_screen(self, self._anchor)
+        QTimer.singleShot(
+            0, lambda: center_dialog_on_parent_or_screen(self, self._anchor)
+        )
 
 
 class PromptEditor(QWidget):
@@ -438,7 +455,10 @@ class PromptEditor(QWidget):
         title: str,
         subtitle: str,
     ) -> tuple[QDialog, QVBoxLayout]:
-        dialog = QDialog(self)
+        anchor = self.window() if self.window() is not None else self
+        if not anchor.isVisible():
+            anchor = self
+        dialog = _PromptEditorVariableDialog(anchor, anchor)
         card_layout = setup_modal_dialog(
             dialog,
             object_name="promptEditorPopup",
@@ -454,12 +474,6 @@ class PromptEditor(QWidget):
         subtitle_label.setStyleSheet(get_modal_subtitle_style())
         card_layout.addWidget(subtitle_label)
         return dialog, card_layout
-
-    def _center_variable_popup(self, dialog: QDialog) -> None:
-        QTimer.singleShot(
-            0,
-            lambda: center_dialog_on_parent_or_screen(dialog, self.window()),
-        )
 
     def _add_dialog_buttons(
         self,
@@ -522,8 +536,6 @@ class PromptEditor(QWidget):
             accept_label="추가",
         )
 
-        self._center_variable_popup(dialog)
-
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
 
@@ -573,8 +585,6 @@ class PromptEditor(QWidget):
         button_bar.addWidget(delete_button)
 
         layout.addLayout(button_bar)
-
-        self._center_variable_popup(dialog)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
@@ -636,8 +646,6 @@ class PromptEditor(QWidget):
             on_accept=on_accept,
             accept_label="저장",
         )
-
-        self._center_variable_popup(dialog)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
